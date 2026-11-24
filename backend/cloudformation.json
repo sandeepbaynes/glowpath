@@ -1,0 +1,306 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Glowpath opt-in challenge leaderboards: throttled HTTP API, on-demand Lambda container sharing Dart puzzle rules, and external Neon Postgres.",
+  "Metadata": {
+    "AWSToolsMetrics": {
+      "AWSAgentToolkit": "aws-cloudformation@3"
+    }
+  },
+  "Parameters": {
+    "ImageUri": {
+      "Type": "String",
+      "Description": "Tested linux/amd64 ECR image URI",
+      "AllowedPattern": ".+\\.dkr\\.ecr\\..+\\.amazonaws\\.com/.+"
+    },
+    "DatabaseSecretArn": {
+      "Type": "String",
+      "Description": "Existing Secrets Manager ARN with DATABASE_URL JSON field",
+      "AllowedPattern": "arn:.*:secretsmanager:.*"
+    }
+  },
+  "Resources": {
+    "Api": {
+      "Type": "AWS::ApiGatewayV2::Api",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "HTTPS front door for anonymous opt-in leaderboard. Application bearer tokens protect scores; only registration and health are public.",
+          "must": [
+            "Do not log bearer tokens or request bodies."
+          ]
+        }
+      },
+      "Properties": {
+        "Name": {
+          "Fn::Sub": "${AWS::StackName}-league"
+        },
+        "ProtocolType": "HTTP"
+      }
+    },
+    "FunctionLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Bound diagnostic retention and cost.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "LogGroupName": {
+          "Fn::Sub": "/aws/lambda/${AWS::StackName}-league"
+        },
+        "RetentionInDays": 7
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "AccessLogs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Request status only, no names, tokens, IP addresses, or bodies.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "RetentionInDays": 7
+      },
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain"
+    },
+    "Role": {
+      "Type": "AWS::IAM::Role",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Execution role only writes its own logs. Neon access uses its separate database credential.",
+          "must": [
+            "No broad AWS data permissions."
+          ]
+        }
+      },
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "function-logs",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-league:*"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "Function": {
+      "Type": "AWS::Lambda::Function",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "On-demand Lambda with shared Dart rule validator and Neon HTTP queries. Scales to zero without a NAT gateway.",
+          "must": [
+            "Every competitive replay uses the same versioned game engine.",
+            "Container must be built and smoke-tested for linux/amd64.",
+            "Database secret never enters client assets."
+          ]
+        }
+      },
+      "Properties": {
+        "FunctionName": {
+          "Fn::Sub": "${AWS::StackName}-league"
+        },
+        "PackageType": "Image",
+        "Code": {
+          "ImageUri": {
+            "Ref": "ImageUri"
+          }
+        },
+        "Role": {
+          "Fn::GetAtt": [
+            "Role",
+            "Arn"
+          ]
+        },
+        "Architectures": [
+          "x86_64"
+        ],
+        "MemorySize": 512,
+        "Timeout": 8,
+        "ReservedConcurrentExecutions": 2,
+        "Environment": {
+          "Variables": {
+            "DATABASE_URL": {
+              "Fn::Sub": "{{resolve:secretsmanager:${DatabaseSecretArn}:SecretString:DATABASE_URL}}"
+            },
+            "REPLAY_VALIDATOR": "/var/task/rules"
+          }
+        }
+      },
+      "DependsOn": [
+        "FunctionLogs"
+      ]
+    },
+    "Integration": {
+      "Type": "AWS::ApiGatewayV2::Integration",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Route HTTP requests to the bounded handler.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "ApiId": {
+          "Ref": "Api"
+        },
+        "IntegrationType": "AWS_PROXY",
+        "IntegrationUri": {
+          "Fn::GetAtt": [
+            "Function",
+            "Arn"
+          ]
+        },
+        "PayloadFormatVersion": "2.0",
+        "TimeoutInMillis": 10000
+      }
+    },
+    "Route": {
+      "Type": "AWS::ApiGatewayV2::Route",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "App-token authentication is enforced in the handler, including reads and deletion.",
+          "must": [
+            "Never trust a score supplied by a client."
+          ]
+        }
+      },
+      "Properties": {
+        "ApiId": {
+          "Ref": "Api"
+        },
+        "RouteKey": "$default",
+        "Target": {
+          "Fn::Join": [
+            "/",
+            [
+              "integrations",
+              {
+                "Ref": "Integration"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "Permission": {
+      "Type": "AWS::Lambda::Permission",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Only this API in this account can invoke the function.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "FunctionName": {
+          "Ref": "Function"
+        },
+        "Action": "lambda:InvokeFunction",
+        "Principal": "apigateway.amazonaws.com",
+        "SourceAccount": {
+          "Ref": "AWS::AccountId"
+        },
+        "SourceArn": {
+          "Fn::Sub": "arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${Api}/*/*/*"
+        }
+      }
+    },
+    "Stage": {
+      "Type": "AWS::ApiGatewayV2::Stage",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Small beta throughput and short diagnostics. Throttles are not a spending cap.",
+          "must": [
+            "Review bot protection and budget monitoring before public promotion."
+          ]
+        }
+      },
+      "Properties": {
+        "ApiId": {
+          "Ref": "Api"
+        },
+        "StageName": "$default",
+        "AutoDeploy": true,
+        "DefaultRouteSettings": {
+          "ThrottlingBurstLimit": 4,
+          "ThrottlingRateLimit": 2
+        },
+        "AccessLogSettings": {
+          "DestinationArn": {
+            "Fn::GetAtt": [
+              "AccessLogs",
+              "Arn"
+            ]
+          },
+          "Format": "{\"requestId\":\"$context.requestId\",\"status\":\"$context.status\",\"latency\":\"$context.responseLatency\"}"
+        }
+      }
+    },
+    "Errors": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Metadata": {
+        "com.aws.cloudformation.Context": {
+          "why": "Observe API failures without adding recipients or sending unsolicited notifications.",
+          "must": []
+        }
+      },
+      "Properties": {
+        "AlarmDescription": "Glowpath leaderboard Lambda errors",
+        "Namespace": "AWS/Lambda",
+        "MetricName": "Errors",
+        "Dimensions": [
+          {
+            "Name": "FunctionName",
+            "Value": {
+              "Ref": "Function"
+            }
+          }
+        ],
+        "Statistic": "Sum",
+        "Period": 60,
+        "EvaluationPeriods": 1,
+        "Threshold": 5,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching"
+      }
+    }
+  },
+  "Outputs": {
+    "Endpoint": {
+      "Description": "Configure LEADERBOARD_URL only after live smoke tests",
+      "Value": {
+        "Fn::GetAtt": [
+          "Api",
+          "ApiEndpoint"
+        ]
+      }
+    }
+  }
+}

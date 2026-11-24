@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Chart a route through distant worlds. Connect three stars before launch.">
+  <meta name="theme-color" content="#060B14">
+  <style>
+    @font-face {
+      font-family: Manrope;
+      src: url('assets/assets/fonts/Manrope-VariableFont_wght.ttf') format('truetype');
+      font-display: swap;
+    }
+    html, body { background: #060B14; margin: 0; overscroll-behavior: none; }
+    #launch-splash {
+      position: fixed; inset: 0; z-index: 10;
+      display: grid; place-items: center;
+      background: radial-gradient(ellipse at center, #101E29 0%, #060B14 70%);
+      color: #f4f2ec; font-family: Manrope, system-ui, sans-serif;
+      opacity: 1; transition: opacity 240ms ease-out;
+      padding: 28px; box-sizing: border-box; overflow: auto;
+    }
+    #launch-splash.ready { opacity: 0; pointer-events: none; }
+    .launch-brand { text-align: center; max-width: 360px; }
+    .launch-mark { width: 128px; height: 128px; display: block; margin: 0 auto 24px; }
+    .launch-name { margin: 0; font-size: 38px; line-height: 1.15; font-weight: 500; letter-spacing: -.5px; }
+    .launch-status { margin: 16px 0 0; font-size: 16px; color: #a9b8c6; }
+    @media (max-height: 420px) { .launch-mark { width: 88px; height: 88px; } }
+    @media (prefers-reduced-motion: reduce) { #launch-splash { transition: none; } }
+  </style>
+
+  <!--
+    Uncomment the tag below to lay the app out underneath the parts of the
+    screen that the device obstructs, such as a display cutout, the rounded
+    corners of the screen, or a home indicator.
+
+    Without it, the browser keeps the app clear of them, and `SafeArea` and
+    `MediaQuery.paddingOf` report no padding. With it, the app covers the whole
+    screen, and it is up to the app to keep its own content out of the way,
+    which is what `SafeArea` is for.
+  -->
+  <!-- <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"> -->
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Glowpath">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Glowpath — chart your course</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <div id="launch-splash" role="status" aria-label="Glowpath. Loading your route.">
+    <div class="launch-brand" aria-hidden="true">
+      <svg class="launch-mark" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="world" cx="25%" cy="20%" r="90%"><stop stop-color="#90aeb6"/><stop offset=".45" stop-color="#263e4d"/><stop offset="1" stop-color="#08121e"/></radialGradient>
+          <linearGradient id="orbit"><stop stop-color="#9adddc"/><stop offset="1" stop-color="#ebc990"/></linearGradient>
+        </defs>
+        <circle cx="64" cy="64" r="30" fill="url(#world)"/>
+        <ellipse cx="64" cy="64" rx="56" ry="26" transform="rotate(-31.5 64 64)" stroke="url(#orbit)" stroke-width="1.2"/>
+        <circle cx="112" cy="35" r="2.6" fill="#ebc990"/>
+        <circle cx="20" cy="28" r="1" fill="#f4f2ec" opacity=".55"/>
+        <circle cx="109" cy="101" r=".8" fill="#f4f2ec" opacity=".35"/>
+      </svg>
+      <p class="launch-name">Glowpath</p>
+      <p class="launch-status">Loading your route</p>
+    </div>
+  </div>
+  <script>
+    // Flutter dispatches this after the first rendered frame. No artificial
+    // waiting period or additional button stands between loading and play.
+    window.addEventListener('flutter-first-frame', function () {
+      const splash = document.getElementById('launch-splash');
+      splash.setAttribute('aria-hidden', 'true');
+      splash.classList.add('ready');
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        splash.remove();
+      } else {
+        splash.addEventListener('transitionend', () => splash.remove(), {once: true});
+      }
+    }, {once: true});
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

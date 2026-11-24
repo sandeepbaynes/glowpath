@@ -1,0 +1,93 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Widget Preview related
+.widget_preview/
+
+# Local service state and secrets
+backend/node_modules/
+backend/build/
+backend/*.sqlite*
+.env
+.env.*
+!*.env.example
+
+# Account-machine credentials and signing material never belong in source.
+.aws/
+.wrangler/
+.dev.vars
+.dev.vars.*
+!*.dev.vars.example
+*.pem
+*.p12
+*.p8
+*.mobileprovision
+*.provisionprofile
+*.keystore
+*.jks
+**/key.properties
+**/GoogleService-Info.plist
+**/google-services.json
+
+# Reproducible review output and retired render experiments stay on this Mac.
+# The live app draws its worlds/cinematics in Flutter; these are not bundled.
+/docs/screenshots/
+/assets/worlds/
+/assets/cinematics/
+*.blend
+*.blend1
+*.blend2
+__pycache__/
+
+# Distribute generated static bundles as versioned GitHub Release assets.
+/deploy/cloudflare/
+
+# Internal business and device/account handoff records stay private.
+/docs/PROJECT_PLAN.md
+/docs/IOS_DEVICE_REVIEW.md
+/docs/ANDROID_REVIEW.md
+/docs/AUDIO_BRIEF.md
+/docs/release/READINESS_2026-11-24.md

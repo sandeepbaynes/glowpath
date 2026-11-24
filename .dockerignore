@@ -1,0 +1,10 @@
+**
+!lib/
+!lib/game/
+!lib/game/puzzle.dart
+!lib/game/voyage_progression.dart
+!backend/
+!backend/Dockerfile
+!backend/*.mjs
+!backend/package*.json
+!backend/validate_replay.dart

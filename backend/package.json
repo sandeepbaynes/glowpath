@@ -1,0 +1,1 @@
+{"name":"glowpath-leaderboards","private":true,"type":"module","scripts":{"test":"node --test test/*.test.mjs","start":"node local.mjs"},"dependencies":{"@neondatabase/serverless":"^1.0.2"}}
