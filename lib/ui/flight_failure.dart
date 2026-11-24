@@ -46,10 +46,30 @@ class FlightFailureFrame {
     double progress,
     Size size, {
     bool reducedMotion = false,
+    bool persistentDrift = false,
+    double? elapsedSeconds,
   }) {
-    final seconds = progress.clamp(0.0, 1.0) * 6;
+    final seconds = persistentDrift && !reducedMotion
+        ? math.max(progress.clamp(0.0, 1.0) * 6, elapsedSeconds ?? 0)
+        : progress.clamp(0.0, 1.0) * 6;
     final broken = reducedMotion || seconds >= 2;
-    final drift = reducedMotion ? .95 : math.max(0.0, seconds - 2);
+    final elapsedDrift = math.max(0.0, seconds - 2);
+    // A folded display keeps watching the same lost craft. The camera settles
+    // into its drift instead of allowing the ship and broken route to vanish.
+    // This time mapping starts with derivative 1 at the snap, so position and
+    // forward velocity remain continuous with the original guided flight.
+    final drift = reducedMotion
+        ? .95
+        : persistentDrift
+        ? 2.2 * (1 - math.exp(-elapsedDrift / 2.2))
+        : elapsedDrift;
+    final ambient = persistentDrift && !reducedMotion
+        ? 1 - math.exp(-elapsedDrift / 3)
+        : 0.0;
+    final phaseAngle = elapsedDrift * .32;
+    final sway =
+        Offset(math.sin(phaseAngle), (1 - math.cos(phaseAngle * .8)) * .6) *
+        (size.shortestSide * .008 * ambient);
     final loss = (drift / 4).clamp(0.0, 1.0);
     final length = (size.shortestSide * .34).clamp(48.0, 118.0);
     final velocity = _guidedVelocity(size);
@@ -61,9 +81,11 @@ class FlightFailureFrame {
     final impulse = Offset(size.width * .025, size.height * .12);
     final responseIntegral =
         drift - response * (1 - math.exp(-drift / response));
-    final point = broken
-        ? snap + velocity * drift + impulse * responseIntegral
-        : start + velocity * seconds;
+    final point =
+        (broken
+            ? snap + velocity * drift + impulse * responseIntegral
+            : start + velocity * seconds) +
+        sway;
     final movement = broken
         ? velocity + impulse * (1 - math.exp(-drift / response))
         : velocity;
@@ -81,18 +103,28 @@ class FlightFailureFrame {
     return FlightFailureFrame._(
       phase: phase,
       rocketPosition: point,
-      rocketVelocity: reducedMotion ? Offset.zero : movement,
+      rocketVelocity: reducedMotion
+          ? Offset.zero
+          : persistentDrift
+          ? movement * math.exp(-elapsedDrift / 2.2)
+          : movement,
       rocketLength: length * scale,
-      rocketAngle: math.atan2(movement.dx, -movement.dy),
+      rocketAngle:
+          math.atan2(movement.dx, -movement.dy) +
+          math.sin(phaseAngle * .7) * .025 * ambient,
       rocketOpacity: opacity,
       routeOpacity: reducedMotion ? .85 : 1 - math.pow(loss, 1.3).toDouble(),
       guideProgress: (seconds / 2).clamp(0.0, 1.0),
       cameraPullback: loss,
       routeBroken: broken,
-      routeBeforeOffset: Offset(-size.width * .035, size.height * .035) * drift,
-      routeAfterOffset: Offset(size.width * .045, -size.height * .025) * drift,
-      routeBeforeRotation: -.11 * drift,
-      routeAfterRotation: .09 * drift,
+      routeBeforeOffset:
+          Offset(-size.width * .035, size.height * .035) * drift - sway * .6,
+      routeAfterOffset:
+          Offset(size.width * .045, -size.height * .025) * drift + sway * .8,
+      routeBeforeRotation:
+          -.11 * drift + math.sin(phaseAngle * .7) * .035 * ambient,
+      routeAfterRotation:
+          .09 * drift - math.sin(phaseAngle * .6) * .035 * ambient,
       routeScale: 1 / (1 + .10 * drift * drift),
       retryOpacity: reducedMotion ? 1 : retryProgress(progress),
     );
@@ -143,12 +175,25 @@ class FlightFailureOverlay extends StatefulWidget {
 }
 
 class _FlightFailureOverlayState extends State<FlightFailureOverlay>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _departure = AnimationController(
     vsync: this,
     duration: FlightFailureOverlay.departureDuration,
   );
-  bool _started = false, _still = true;
+  late final AnimationController _drift = AnimationController.unbounded(
+    vsync: this,
+  );
+  bool _still = true, _foreground = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _foreground =
+        WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -168,15 +213,37 @@ class _FlightFailureOverlayState extends State<FlightFailureOverlay>
         MediaQuery.disableAnimationsOf(context);
     if (_still) {
       _departure.value = 1;
-    } else if (!_started) {
+      _drift.stop();
+      return;
+    }
+    final active = _foreground && TickerMode.valuesOf(context).enabled;
+    if (!active) {
+      _departure.stop();
+      _drift.stop();
+      return;
+    }
+    if (!_departure.isAnimating && !_departure.isCompleted) {
       _departure.forward();
     }
-    _started = true;
+    if (widget.panes == null) {
+      _drift.stop();
+    } else if (!_drift.isAnimating) {
+      _drift.value = math.max(_drift.value, _departure.value * 6);
+      _drift.animateWith(_DriftClock(_drift.value));
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    _syncMotion();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _departure.dispose();
+    _drift.dispose();
     super.dispose();
   }
 
@@ -482,6 +549,8 @@ class _FlightFailureOverlayState extends State<FlightFailureOverlay>
                   _departure,
                   reducedMotion: _still,
                   trailColor: widget.trailColor,
+                  persistentDrift: true,
+                  driftClock: _drift,
                 ),
               ),
             ),
@@ -587,6 +656,19 @@ class _FlightFailureOverlayState extends State<FlightFailureOverlay>
   }
 }
 
+/// Elapsed foreground seconds, resumed from its stored value after hiding or
+/// backgrounding. It has no repeating boundary at which the craft can jump.
+class _DriftClock extends Simulation {
+  _DriftClock(this.start);
+  final double start;
+  @override
+  double x(double time) => start + time;
+  @override
+  double dx(double time) => 1;
+  @override
+  bool isDone(double time) => false;
+}
+
 class _FailureSky extends CustomPainter {
   _FailureSky(this.departure, {required this.still})
     : super(repaint: departure);
@@ -651,14 +733,19 @@ class LostRocketPainter extends CustomPainter {
     this.departure, {
     this.reducedMotion = false,
     this.trailColor = Palette.light,
-  }) : super(repaint: departure);
+    this.persistentDrift = false,
+    this.driftClock,
+  }) : super(repaint: Listenable.merge([departure, driftClock]));
   final Animation<double> departure;
-  final bool reducedMotion;
+  final Animation<double>? driftClock;
+  final bool reducedMotion, persistentDrift;
   final Color trailColor;
   FlightFailureFrame frame(Size size) => FlightFailureFrame.at(
     departure.value,
     size,
     reducedMotion: reducedMotion,
+    persistentDrift: persistentDrift,
+    elapsedSeconds: driftClock?.value,
   );
   Offset rocketPosition(Size size) => frame(size).rocketPosition;
   double rocketLength(Size size) => frame(size).rocketLength;
@@ -707,7 +794,11 @@ class LostRocketPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final f = frame(size);
-    final seconds = reducedMotion ? 2.95 : departure.value * 6;
+    final seconds = reducedMotion
+        ? 2.95
+        : persistentDrift
+        ? math.max(departure.value * 6, driftClock?.value ?? 0)
+        : departure.value * 6;
     final drift = math.max(0.0, seconds - 2);
     final extent = size.shortestSide;
     final direction = _routeDirection(size);
@@ -865,6 +956,28 @@ class LostRocketPainter extends CustomPainter {
         canvas.restore();
       }
     }
+    if (persistentDrift && !reducedMotion && drift > 1.2) {
+      // Quiet debris remains in the lost scene. Each speck fades at both ends
+      // of its travel, so even the ambient field has no visible loop seam.
+      final reveal = 1 - math.exp(-(drift - 1.2) / 3);
+      for (var i = 0; i < 12; i++) {
+        final travel = ((drift - 1.2) / (24 + i * 2) + i * .618034) % 1;
+        final alpha =
+            math.pow(math.sin(travel * math.pi), 2).toDouble() * .24 * reveal;
+        final point = Offset(
+          size.width * (.1 + ((i * .381966) % 1) * .8),
+          size.height * (.12 + travel * .76),
+        );
+        canvas.drawLine(
+          point,
+          point + Offset(1.5 + i % 3, .8),
+          Paint()
+            ..color = const Color(0xFFB6CDE6).withValues(alpha: alpha)
+            ..strokeWidth = .8
+            ..strokeCap = StrokeCap.round,
+        );
+      }
+    }
     if (f.rocketOpacity <= 0 || f.rocketLength < .1) return;
     final unit = f.rocketLength / 2.31;
     canvas.saveLayer(
@@ -925,6 +1038,8 @@ class LostRocketPainter extends CustomPainter {
   @override
   bool shouldRepaint(LostRocketPainter old) =>
       departure != old.departure ||
+      driftClock != old.driftClock ||
+      persistentDrift != old.persistentDrift ||
       reducedMotion != old.reducedMotion ||
       trailColor != old.trailColor;
 }

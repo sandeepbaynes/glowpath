@@ -2702,7 +2702,7 @@ class _GameScreenState extends State<GameScreen>
           onGenerateRoute: (_) => MaterialPageRoute<void>(
             builder: (_) => const LicensePage(
               applicationName: 'Glowpath',
-              applicationVersion: '0.11.2',
+              applicationVersion: '0.11.3',
             ),
           ),
         ),

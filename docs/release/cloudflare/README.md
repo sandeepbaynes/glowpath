@@ -2,17 +2,17 @@
 
 Use the **prebuilt Cloudflare ZIP attached to the repository's GitHub Release**. Uploading a prebuilt package requires only a browser and a Cloudflare account; no local Flutter, Blender, Node or AWS installation is needed. The repository contains source and build instructions; generated web files stay in release assets so each code change does not add another large binary tree to Git history.
 
-For version `0.11.2+32`, download these three matching release assets:
+For version `0.11.3+33`, download these three matching release assets:
 
-- `glowpath-0.11.2-32-cloudflare-preview-root.zip` — the deployable site, with `index.html` directly at its root.
-- `glowpath-0.11.2-32-cloudflare-preview-root.json` — version, flags, file inventory and SHA-256 hashes.
-- `glowpath-0.11.2-32-cloudflare-preview-root.sha256` — checksum for the ZIP.
+- `glowpath-0.11.3-33-cloudflare-preview-root.zip` — the deployable site, with `index.html` directly at its root.
+- `glowpath-0.11.3-33-cloudflare-preview-root.json` — version, flags, file inventory and SHA-256 hashes.
+- `glowpath-0.11.3-33-cloudflare-preview-root.sha256` — checksum for the ZIP.
 
 The ZIP is an **ad-free preview**, not a monetized release: real ads, purchases and mock transactions are disabled; no leaderboard endpoint is configured. Saves, scores and collections are local to each browser/origin. Moving to a custom domain creates a different save origin. No cloud backend is needed for this build.
 
 ## Upload a prebuilt package
 
-1. Download the matching ZIP, JSON and checksum from the repository's Releases page. Optional integrity check from their download directory: `shasum -a 256 -c glowpath-0.11.2-32-cloudflare-preview-root.sha256` (macOS) or `sha256sum -c glowpath-0.11.2-32-cloudflare-preview-root.sha256` (Linux). PowerShell can calculate it with `Get-FileHash <zip-file> -Algorithm SHA256`.
+1. Download the matching ZIP, JSON and checksum from the repository's Releases page. Optional integrity check from their download directory: `shasum -a 256 -c glowpath-0.11.3-33-cloudflare-preview-root.sha256` (macOS) or `sha256sum -c glowpath-0.11.3-33-cloudflare-preview-root.sha256` (Linux). PowerShell can calculate it with `Get-FileHash <zip-file> -Algorithm SHA256`.
 2. In Cloudflare, open **Workers & Pages → Create application**, choose the Pages **Drag and drop** / **Direct Upload** flow, and name the project. Upload the **ZIP**, not GitHub's “Source code” archive and not the whole repository. No build command or environment variables are required.
 3. Deploy, then open the resulting `https://<project>.pages.dev/` address. For subsequent releases, use the existing project's **Create a new deployment** action.
 4. Check first load, phone/tablet layout, solving a route, wormhole entry/exit, timeout/Retry, cargo/achievements, pause on backgrounding, and reload with saved progress. Hints/skips must not display real ad or payment prompts. These are deployment checks, not a substitute for physical-device review.
@@ -36,7 +36,7 @@ The script writes a fresh directory, ZIP, JSON and checksum under `build/review/
 Verify a downloaded package without Flutter:
 
 ```sh
-python3 tools/package_web.py --verify-archive /path/to/glowpath-0.11.2-32-cloudflare-preview-root.zip
+python3 tools/package_web.py --verify-archive /path/to/glowpath-0.11.3-33-cloudflare-preview-root.zip
 ```
 
 For a generic static host under a subdirectory, rebuild with `--target static --base-href /glowpath/ --mode preview`; serve it at that exact path. Do not relocate the Cloudflare root build into a subfolder. Hosting approval does not activate web ads: the H5 adapter, consent, publisher/site configuration and rewarded-ad verification remain separate work in [web release preparation](../../WEB_RELEASE.md).

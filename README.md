@@ -59,7 +59,7 @@ The project uses **Flutter and Dart**, with a small Swift bridge for iOS fold ge
 
 Procedural levels are deterministic and checked for legal solutions. Tests cover connected routes, coupled tiles, independent crossing lanes, portal transfers, replay validation, rewards and save migration. Layout checks exercise phones, tablets, fold postures, enlarged text and touch-target bounds. Reduced motion, semantic labels and keyboard controls are implemented; physical-device accessibility and performance review continue.
 
-**0.11.2 validation:** 876 Flutter tests pass, with clean static analysis. Fold review includes the iPhone simulator and synthetic Android clamshell layouts; physical-device review continues. These checks establish behavior within the tested cases; player enjoyment is evaluated by playing the game. [Read the verification notes](docs/release/0.11.2.md).
+**0.11.3 validation:** 885 Flutter tests pass, with clean static analysis. Fold review includes the iPhone simulator and synthetic Android clamshell layouts; physical-device review continues. These checks establish behavior within the tested cases; player enjoyment is evaluated by playing the game. [Read the verification notes](docs/release/0.11.3.md).
 
 ## Run it locally
 
