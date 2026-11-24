@@ -13,6 +13,7 @@ import 'game/voyage_progression.dart';
 import 'ui/cargo_art.dart';
 import 'ui/challenge_instruments.dart';
 import 'ui/challenge_result.dart';
+import 'ui/cutout_beacon.dart';
 import 'services/flight_league.dart';
 import 'services/flight_support.dart';
 import 'services/fold_posture.dart';
@@ -706,24 +707,35 @@ class _GameScreenState extends State<GameScreen>
   Widget _flightForeground() {
     final size = MediaQuery.sizeOf(context);
     final geometry = _foldGeometry.value;
-    Rect? horizontal = geometry.horizontalDivision(size);
-    Rect? vertical = geometry.verticalDivision(size);
+    final outer = _closedFoldRegions(size, geometry);
+    if (!_showPlanets && !_challengeComplete && outer != null) {
+      return _closedFoldFlight(camera: outer.camera, statusArea: outer.status);
+    }
+    Rect? horizontal = geometry.horizontalLayoutDivision(size);
+    Rect? vertical = geometry.verticalLayoutDivision(size);
+    var expanded = geometry.status == HingePosture.fullyOpen;
     // Android already reports fold/hinge geometry through Flutter. iOS uses
     // its public reserved-region bridge, never an assumed screen midpoint.
     for (final feature in MediaQuery.of(context).displayFeatures) {
-      if (feature.state != DisplayFeatureState.postureHalfOpened &&
+      if (feature.type != DisplayFeatureType.fold &&
           feature.type != DisplayFeatureType.hinge) {
         continue;
       }
       final region = feature.bounds;
       if (region.width > region.height &&
+          region.left <= 1 &&
+          region.right >= size.width - 1 &&
           region.top > 0 &&
           region.bottom < size.height) {
         horizontal ??= region;
+        expanded = feature.state == DisplayFeatureState.postureFlat;
       } else if (region.height > region.width &&
+          region.top <= 1 &&
+          region.bottom >= size.height - 1 &&
           region.left > 0 &&
           region.right < size.width) {
         vertical ??= region;
+        expanded = feature.state == DisplayFeatureState.postureFlat;
       }
     }
     if (!_showPlanets &&
@@ -732,6 +744,7 @@ class _GameScreenState extends State<GameScreen>
       return _foldFlight(
         horizontal ?? vertical!,
         horizontal: horizontal != null,
+        expanded: expanded,
       );
     }
     return SafeArea(
@@ -767,7 +780,121 @@ class _GameScreenState extends State<GameScreen>
     );
   }
 
-  Widget _foldFlight(Rect division, {required bool horizontal}) {
+  ({Rect camera, Rect status})? _closedFoldRegions(
+    Size size,
+    FoldGeometry geometry,
+  ) {
+    // Identify the outer display from actual camera + status exclusion bounds.
+    // Status only guards against a stale outer-display event during unfolding.
+    if (!geometry.supported ||
+        geometry.status != HingePosture.closed ||
+        !geometry.matchesViewport(size) ||
+        size.width >= size.height ||
+        size.height < 520) {
+      return null;
+    }
+    for (final camera in geometry.occlusions) {
+      if (camera.shortestSide < 20 ||
+          camera.longestSide > 64 ||
+          (camera.width - camera.height).abs() > 4 ||
+          camera.center.dx < size.width * .75 ||
+          camera.bottom > size.height * .3) {
+        continue;
+      }
+      for (final status in geometry.occlusions) {
+        if (status == camera ||
+            !status.contains(camera.center) ||
+            status.right < size.width - 1 ||
+            status.left < size.width * .72 ||
+            status.height <= camera.height ||
+            size.height - status.bottom < 300) {
+          continue;
+        }
+        return (camera: camera, status: status);
+      }
+    }
+    return null;
+  }
+
+  Widget _closedFoldFlight({required Rect camera, required Rect statusArea}) {
+    final media = MediaQuery.of(context);
+    return MediaQuery(
+      data: media.copyWith(
+        textScaler: media.textScaler.clamp(maxScaleFactor: 1.1),
+      ),
+      child: Stack(
+        key: const ValueKey('closed-fold-flight'),
+        children: [
+          Positioned(
+            left: media.padding.left,
+            top: media.padding.top + 8,
+            width: statusArea.left - media.padding.left,
+            bottom: media.padding.bottom + 8,
+            child: Padding(
+              key: const ValueKey('closed-fold-main'),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(right: 28),
+                    child: _compactDestination(),
+                  ),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, bounds) => Center(
+                        child: SizedBox(
+                          width: math.min(
+                            bounds.maxWidth,
+                            bounds.maxHeight - 28,
+                          ),
+                          child: _board(compact: true),
+                        ),
+                      ),
+                    ),
+                  ),
+                  _playPanel(compact: true),
+                  const SizedBox(height: 8),
+                  _foldNavigation(),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            left: statusArea.left + 2,
+            top: statusArea.bottom + 10,
+            right: 6,
+            bottom: media.padding.bottom + 16,
+            child: SizedBox(
+              key: const ValueKey('closed-fold-launch-rail'),
+              child: _launchInstrument(vertical: true),
+            ),
+          ),
+          Positioned.fill(
+            child: ValueListenableBuilder<Duration>(
+              valueListenable: _remaining,
+              builder: (context, remaining, _) => CutoutBeacon(
+                camera: camera,
+                systemOcclusions: _foldGeometry.value.occlusions,
+                remaining: remaining,
+                total: _launchWindow,
+                reducedMotion: _reduced,
+                paused: !_foreground || _panelOpen || _briefingOpen,
+                complete: _game.status.solved,
+                trailColor: _trailColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _foldFlight(
+    Rect division, {
+    required bool horizontal,
+    required bool expanded,
+  }) {
     final media = MediaQuery.of(context);
     final size = media.size;
     final safe = Rect.fromLTRB(
@@ -776,17 +903,21 @@ class _GameScreenState extends State<GameScreen>
       size.width - media.padding.right,
       size.height - media.padding.bottom,
     );
+    // Keep the same breathing room when the physical crease becomes inactive
+    // (zero thickness). The puzzle never recentres or switches sides on open.
+    final halfGap =
+        math.max(40.0, horizontal ? division.height : division.width) / 2 + 8;
     final gap = horizontal
         ? Rect.fromLTRB(
             safe.left,
-            division.top - 8,
+            division.center.dy - halfGap,
             safe.right,
-            division.bottom + 8,
+            division.center.dy + halfGap,
           )
         : Rect.fromLTRB(
-            division.left - 8,
+            division.center.dx - halfGap,
             safe.top,
-            division.right + 8,
+            division.center.dx + halfGap,
             safe.bottom,
           );
     final missionFrame = horizontal
@@ -815,6 +946,7 @@ class _GameScreenState extends State<GameScreen>
               child: _foldMissionPane(
                 horizontal: horizontal,
                 includeTools: toolsAbove,
+                expanded: expanded,
               ),
             ),
           ),
@@ -856,9 +988,45 @@ class _GameScreenState extends State<GameScreen>
   Widget _foldMissionPane({
     required bool horizontal,
     required bool includeTools,
+    required bool expanded,
   }) => LayoutBuilder(
     builder: (context, bounds) {
       final wide = bounds.maxWidth >= 620 && horizontal;
+      if (horizontal && includeTools) {
+        // A clamshell becomes a small mission desk: the upright half carries
+        // its own unobscured map and timer; every routing tile stays below.
+        return Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _compactDestination(),
+              Expanded(
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 4,
+                      child: ClipRect(
+                        child: _foldMap(expanded: expanded, verticalFocus: .30),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 6,
+                      child: _launchInstrument(prominent: true, dense: true),
+                    ),
+                  ],
+                ),
+              ),
+              PuzzleLegend(status: _displayStatus, compact: true),
+              const SizedBox(height: 6),
+              SizedBox(height: 48, child: _controls(compact: true)),
+              const SizedBox(height: 8),
+              _foldNavigation(),
+            ],
+          ),
+        );
+      }
       final instruments = Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -880,22 +1048,7 @@ class _GameScreenState extends State<GameScreen>
       return Stack(
         fit: StackFit.expand,
         children: [
-          IgnorePointer(
-            child: ExcludeSemantics(
-              child: VoyageExplorer(
-                sceneKey: const ValueKey('fold-live-map'),
-                current: _world,
-                routesAtDestination: (_game.puzzle.levelNumber - 1) % 15,
-                showCourier: true,
-                animateArrival: false,
-                ambientMotion: widget.ambientMotion,
-                reduceMotion: _reduced,
-                trailColor: _trailColor,
-                verticalFocus: horizontal ? .36 : .25,
-                paintBackground: false,
-              ),
-            ),
-          ),
+          _foldMap(expanded: expanded, verticalFocus: horizontal ? .36 : .25),
           IgnorePointer(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -924,6 +1077,39 @@ class _GameScreenState extends State<GameScreen>
       );
     },
   );
+
+  Widget _foldMap({required bool expanded, required double verticalFocus}) =>
+      IgnorePointer(
+        child: ExcludeSemantics(
+          child: AnimatedOpacity(
+            key: const ValueKey('fold-map-reveal'),
+            opacity: expanded ? 1 : .76,
+            duration: _reduced
+                ? Duration.zero
+                : const Duration(milliseconds: 650),
+            curve: Curves.easeInOutCubic,
+            child: AnimatedScale(
+              scale: expanded ? 1.025 : 1,
+              duration: _reduced
+                  ? Duration.zero
+                  : const Duration(milliseconds: 850),
+              curve: Curves.easeInOutCubic,
+              child: VoyageExplorer(
+                sceneKey: const ValueKey('fold-live-map'),
+                current: _world,
+                routesAtDestination: (_game.puzzle.levelNumber - 1) % 15,
+                showCourier: true,
+                animateArrival: false,
+                ambientMotion: widget.ambientMotion,
+                reduceMotion: _reduced,
+                trailColor: _trailColor,
+                verticalFocus: verticalFocus,
+                paintBackground: false,
+              ),
+            ),
+          ),
+        ),
+      );
 
   Widget _foldNavigation() => KeyedSubtree(
     key: const ValueKey('shared-navigation'),
@@ -1000,38 +1186,40 @@ class _GameScreenState extends State<GameScreen>
     },
   );
 
-  Widget _navigationDock() => MediaQuery(
-    data: MediaQuery.of(context).copyWith(
-      textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.1),
-    ),
-    child: OrbitDock(
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(child: _mode('Voyage', GameMode.voyage)),
-            const SizedBox(width: 4),
-            Expanded(child: _mode('Daily', GameMode.daily)),
-            const SizedBox(width: 4),
-            Expanded(child: _mode('Weekly', GameMode.weekly)),
-            const SizedBox(width: 8),
-            OrbitUtility(
-              key: const ValueKey('open-help'),
-              width: MediaQuery.sizeOf(context).width < 360 ? 48 : 56,
-              label: 'How to play',
-              onPressed: _help,
-              icon: Icons.help_outline_rounded,
-              reduceMotion: _reduced,
-            ),
-            OrbitUtility(
-              key: const ValueKey('open-settings'),
-              width: MediaQuery.sizeOf(context).width < 360 ? 48 : 56,
-              label: 'Settings and restart',
-              onPressed: _settings,
-              icon: Icons.tune_rounded,
-              reduceMotion: _reduced,
-            ),
-          ],
+  Widget _navigationDock() => LayoutBuilder(
+    builder: (context, constraints) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.1),
+      ),
+      child: OrbitDock(
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _mode('Voyage', GameMode.voyage)),
+              const SizedBox(width: 4),
+              Expanded(child: _mode('Daily', GameMode.daily)),
+              const SizedBox(width: 4),
+              Expanded(child: _mode('Weekly', GameMode.weekly)),
+              const SizedBox(width: 8),
+              OrbitUtility(
+                key: const ValueKey('open-help'),
+                width: constraints.maxWidth < 360 ? 48 : 56,
+                label: 'How to play',
+                onPressed: _help,
+                icon: Icons.help_outline_rounded,
+                reduceMotion: _reduced,
+              ),
+              OrbitUtility(
+                key: const ValueKey('open-settings'),
+                width: constraints.maxWidth < 360 ? 48 : 56,
+                label: 'Settings and restart',
+                onPressed: _settings,
+                icon: Icons.tune_rounded,
+                reduceMotion: _reduced,
+              ),
+            ],
+          ),
         ),
       ),
     ),
@@ -1406,19 +1594,21 @@ class _GameScreenState extends State<GameScreen>
     bool compact = false,
     bool prominent = false,
     bool dense = false,
+    bool vertical = false,
   }) => ValueListenableBuilder<Duration>(
     valueListenable: _remaining,
     builder: (context, remaining, _) => LaunchCountdown(
       compact: compact,
       prominent: prominent,
       dense: dense,
+      vertical: vertical,
       trailColor: _trailColor,
       remaining: remaining,
       total: _launchWindow,
       reducedMotion: _reduced,
       expired: _flightFailed,
       complete: _game.status.solved,
-      paused: !_foreground || _panelOpen,
+      paused: !_foreground || _panelOpen || _briefingOpen,
     ),
   );
 

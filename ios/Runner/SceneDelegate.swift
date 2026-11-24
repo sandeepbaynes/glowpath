@@ -69,7 +69,7 @@ private final class FoldGeometryBridge: NSObject, FlutterStreamHandler {
   private var sink: FlutterEventSink?
   private var latest: [String: Any] = [
     "version": 1, "supported": false, "width": 0.0, "height": 0.0,
-    "divisions": [], "occlusions": [], "status": "unavailable",
+    "divisions": [], "layoutDivisions": [], "occlusions": [], "status": "unavailable",
   ]
 
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
@@ -89,11 +89,13 @@ private final class FoldGeometryBridge: NSObject, FlutterStreamHandler {
     sink = nil
   }
 
-  func updateGeometry(size: CGSize, divisions: [CGRect], occlusions: [CGRect], supported: Bool) {
+  func updateGeometry(size: CGSize, divisions: [CGRect], layoutDivisions: [CGRect],
+                      occlusions: [CGRect], supported: Bool) {
     var next = latest
     next["width"] = size.width
     next["height"] = size.height
     next["divisions"] = divisions.map(Self.encode)
+    next["layoutDivisions"] = layoutDivisions.map(Self.encode)
     next["occlusions"] = occlusions.map(Self.encode)
     next["supported"] = supported
     publish(next)
@@ -177,19 +179,26 @@ private final class FoldGeometryProbe: UIView {
         let divisions = reservedRegions(kind: .division).map {
           flutterFrame($0.frame, in: coordinateView)
         }
+        // Inactive divisions remain layout guides as a folded device opens.
+        // Keep them separate from active divisions, which require avoidance.
+        let layoutDivisions = reservedRegions(kind: .division, options: .includeInactive).map {
+          flutterFrame($0.frame, in: coordinateView)
+        }
         let occlusions = reservedRegions(kind: .occlusion).map {
           flutterFrame($0.frame, in: coordinateView)
         }
         bridge?.updateGeometry(size: coordinateView.bounds.size, divisions: divisions,
-                               occlusions: occlusions, supported: true)
+                               layoutDivisions: layoutDivisions, occlusions: occlusions,
+                               supported: true)
 #if DEBUG
-        logGeometry(in: coordinateView, divisions: divisions, occlusions: occlusions)
+        logGeometry(in: coordinateView, divisions: divisions, layoutDivisions: layoutDivisions,
+                    occlusions: occlusions)
 #endif
       } else {
         bridge?.updateGeometry(size: coordinateView.bounds.size, divisions: [],
-                               occlusions: [], supported: false)
+                               layoutDivisions: [], occlusions: [], supported: false)
 #if DEBUG
-        logGeometry(in: coordinateView, divisions: [], occlusions: [])
+        logGeometry(in: coordinateView, divisions: [], layoutDivisions: [], occlusions: [])
 #endif
       }
     }
@@ -203,7 +212,8 @@ private final class FoldGeometryProbe: UIView {
   }
 
 #if DEBUG
-  private func logGeometry(in target: UIView, divisions: [CGRect], occlusions: [CGRect]) {
+  private func logGeometry(in target: UIView, divisions: [CGRect], layoutDivisions: [CGRect],
+                           occlusions: [CGRect]) {
     func rect(_ value: CGRect) -> [Double] {
       [Double(value.minX), Double(value.minY), Double(value.width), Double(value.height)]
     }
@@ -212,7 +222,8 @@ private final class FoldGeometryProbe: UIView {
       "viewBounds": rect(target.bounds),
       "safeAreaInsets": ["top": Double(insets.top), "left": Double(insets.left),
                          "bottom": Double(insets.bottom), "right": Double(insets.right)],
-      "divisions": divisions.map(rect), "occlusions": occlusions.map(rect),
+      "divisions": divisions.map(rect), "layoutDivisions": layoutDivisions.map(rect),
+      "occlusions": occlusions.map(rect),
       "status": debugHingeStatus,
     ]
     guard let data = try? JSONSerialization.data(withJSONObject: snapshot, options: [.sortedKeys]),

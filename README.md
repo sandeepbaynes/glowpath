@@ -45,7 +45,7 @@ The workflow is a repeated loop: **describe the experience → build it → play
 | Players could not immediately identify the route's endpoints. | Cyan START and gold FINISH combine labels, symbols and placement. |
 | The journey added too many steps before play. | One consistent Voyage landing and one Play action resume the route. |
 | Scenery and transitions competed with the puzzle. | Gentle layered motion, shared planet artwork and reduced-motion alternatives. |
-| Opening or folding the device should preserve play. | Responsive panes use hinge and reserved-region geometry without resetting the puzzle. |
+| Opening or folding the device should preserve play. | The board stays in one pane from half-open to fully open; the surrounding mission map transitions gently. Clamshell folds become a two-part mission desk. |
 
 Parallel agents handled focused work such as layout regressions, native fold integration, portal feedback and packaging reviews. The main game uses custom Flutter-painted artwork and projected cargo meshes. Blender scripts record visual exploration; typography uses bundled Manrope, Atkinson Hyperlegible Next and Lora fonts.
 
@@ -55,7 +55,7 @@ The project uses **Flutter and Dart**, with a small Swift bridge for iOS fold ge
 
 Procedural levels are deterministic and checked for legal solutions. Tests cover connected routes, coupled tiles, independent crossing lanes, portal transfers, replay validation, rewards and save migration. Layout checks exercise phones, tablets, fold postures, enlarged text and touch-target bounds. Reduced motion, semantic labels and keyboard controls are implemented; physical-device accessibility and performance review continue.
 
-**0.11 validation:** 784 Flutter tests and nine packaging tests passed, with clean static analysis. These checks establish behavior within the tested cases; player enjoyment is evaluated by playing the game. [Read the verification notes](docs/release/0.11.0.md).
+**0.11.1 validation:** 818 Flutter tests pass, with clean static analysis. Fold review includes the iPhone simulator and synthetic Android clamshell layouts; physical-device review continues. These checks establish behavior within the tested cases; player enjoyment is evaluated by playing the game. [Read the verification notes](docs/release/0.11.1.md).
 
 ## Run it locally
 

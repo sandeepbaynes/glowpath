@@ -21,6 +21,123 @@ void main() {
     expect(geometry.verticalDivision(const Size(669, 951)), isNull);
   });
 
+  test('inactive native creases retain zero-thickness layout anchors', () {
+    for (final horizontal in [true, false]) {
+      final size = horizontal ? const Size(669, 951) : const Size(951, 669);
+      final anchor = horizontal
+          ? const Rect.fromLTWH(0, 475.5, 669, 0)
+          : const Rect.fromLTWH(475.5, 0, 0, 669);
+      final geometry = FoldGeometry.fromEvent({
+        ..._event(),
+        'width': size.width,
+        'height': size.height,
+        'status': 'fullyOpen',
+        'divisions': <Object>[],
+        'layoutDivisions': [_region(anchor)],
+      });
+      expect(geometry.divisions, isEmpty);
+      expect(geometry.layoutDivisions, [anchor]);
+      expect(geometry.horizontalDivision(size), isNull);
+      expect(geometry.verticalDivision(size), isNull);
+      expect(
+        horizontal
+            ? geometry.horizontalLayoutDivision(size)
+            : geometry.verticalLayoutDivision(size),
+        anchor,
+      );
+      expect(
+        horizontal
+            ? geometry.verticalLayoutDivision(size)
+            : geometry.horizontalLayoutDivision(size),
+        isNull,
+      );
+    }
+  });
+
+  test('layout anchors take precedence over active division margins', () {
+    final geometry = FoldGeometry.fromEvent({
+      ..._event(),
+      'layoutDivisions': [_region(const Rect.fromLTWH(0, 475.5, 669, 0))],
+    });
+    expect(
+      geometry.horizontalDivision(const Size(669, 951)),
+      const Rect.fromLTWH(0, 461, 669, 28),
+    );
+    expect(
+      geometry.horizontalLayoutDivision(const Size(669, 951)),
+      const Rect.fromLTWH(0, 475.5, 669, 0),
+    );
+  });
+
+  test('legacy messages fall back to active division geometry', () {
+    for (final horizontal in [true, false]) {
+      final size = horizontal ? const Size(669, 951) : const Size(951, 669);
+      final active = horizontal
+          ? const Rect.fromLTWH(0, 461, 669, 28)
+          : const Rect.fromLTWH(461, 0, 28, 669);
+      for (final includeEmpty in [false, true]) {
+        final geometry = FoldGeometry.fromEvent({
+          ..._event(),
+          'width': size.width,
+          'height': size.height,
+          'divisions': [_region(active)],
+          if (includeEmpty) 'layoutDivisions': <Object>[],
+        });
+        expect(geometry.layoutDivisions, isEmpty);
+        expect(
+          horizontal
+              ? geometry.horizontalLayoutDivision(size)
+              : geometry.verticalLayoutDivision(size),
+          active,
+        );
+      }
+    }
+  });
+
+  test(
+    'invalid layout payloads are filtered and stale anchors are rejected',
+    () {
+      final geometry = FoldGeometry.fromEvent({
+        ..._event(),
+        'divisions': <Object>[],
+        'layoutDivisions': [
+          null,
+          'invalid',
+          {'x': 0, 'y': 100, 'width': double.infinity, 'height': 0},
+          {'x': double.nan, 'y': 100, 'width': 669, 'height': 0},
+          {'x': 0, 'y': 100, 'width': -669, 'height': 0},
+          {'x': 0, 'y': 100, 'width': 0, 'height': 0},
+          {'x': 0, 'y': 100, 'width': 669},
+          _region(const Rect.fromLTWH(0, 475.5, 669, 0)),
+        ],
+      });
+      expect(geometry.layoutDivisions, [const Rect.fromLTWH(0, 475.5, 669, 0)]);
+      expect(geometry.horizontalLayoutDivision(const Size(951, 669)), isNull);
+      expect(geometry.verticalLayoutDivision(const Size(951, 669)), isNull);
+
+      final unusableAnchors = FoldGeometry.fromEvent({
+        ..._event(),
+        'divisions': <Object>[],
+        'layoutDivisions': [
+          _region(const Rect.fromLTWH(0, 475, 200, 0)),
+          _region(const Rect.fromLTWH(0, 0, 669, 0)),
+          _region(const Rect.fromLTWH(0, 951, 669, 0)),
+          _region(const Rect.fromLTWH(0, 0, 0, 951)),
+          _region(const Rect.fromLTWH(669, 0, 0, 951)),
+          _region(const Rect.fromLTWH(334, 0, 0, 200)),
+        ],
+      });
+      expect(
+        unusableAnchors.horizontalLayoutDivision(const Size(669, 951)),
+        isNull,
+      );
+      expect(
+        unusableAnchors.verticalLayoutDivision(const Size(669, 951)),
+        isNull,
+      );
+    },
+  );
+
   test('rotation cannot use stale geometry or infer posture from aspect', () {
     final geometry = FoldGeometry.fromEvent(_event());
     expect(geometry.horizontalDivision(const Size(951, 669)), isNull);
@@ -104,6 +221,45 @@ void main() {
     },
   );
 
+  test(
+    'layout-only changes notify once and identical anchors deduplicate',
+    () async {
+      final events = StreamController<dynamic>();
+      final posture = FoldPosture(events: events.stream);
+      var notifications = 0;
+      posture.addListener(() => notifications++);
+      final initial = {
+        ..._event(),
+        'status': 'fullyOpen',
+        'divisions': <Object>[],
+        'layoutDivisions': [_region(const Rect.fromLTWH(0, 475.5, 669, 0))],
+      };
+      events.add(initial);
+      await Future<void>.delayed(Duration.zero);
+      final first = posture.value;
+      expect(notifications, 1);
+      events.add({...initial});
+      await Future<void>.delayed(Duration.zero);
+      expect(posture.value, first);
+      expect(posture.value.hashCode, first.hashCode);
+      expect(notifications, 1);
+
+      events.add({
+        ...initial,
+        'layoutDivisions': [_region(const Rect.fromLTWH(0, 476.5, 669, 0))],
+      });
+      await Future<void>.delayed(Duration.zero);
+      expect(posture.value, isNot(first));
+      expect(notifications, 2);
+      events.add({...initial, 'layoutDivisions': <Object>[]});
+      await Future<void>.delayed(Duration.zero);
+      expect(posture.value.layoutDivisions, isEmpty);
+      expect(notifications, 3);
+      posture.dispose();
+      await events.close();
+    },
+  );
+
   test('stream errors and closure clear stale folding state', () async {
     final events = StreamController<dynamic>();
     final posture = FoldPosture(events: events.stream);
@@ -131,6 +287,13 @@ void main() {
     },
   );
 }
+
+Map<String, double> _region(Rect rect) => {
+  'x': rect.left,
+  'y': rect.top,
+  'width': rect.width,
+  'height': rect.height,
+};
 
 Map<String, Object> _event() => {
   'version': 1,

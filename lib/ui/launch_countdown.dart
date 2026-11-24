@@ -19,6 +19,7 @@ class LaunchCountdown extends StatelessWidget {
     this.compact = false,
     this.prominent = false,
     this.dense = false,
+    this.vertical = false,
     this.trailColor = Palette.light,
   });
 
@@ -30,7 +31,8 @@ class LaunchCountdown extends StatelessWidget {
       paused,
       compact,
       prominent,
-      dense;
+      dense,
+      vertical;
 
   @override
   Widget build(BuildContext context) {
@@ -59,6 +61,23 @@ class LaunchCountdown extends StatelessWidget {
         : paused
         ? '$seconds seconds remaining. Countdown paused.'
         : '$seconds seconds remaining. Rocket ${urgent ? 'at full thrust' : 'warming up'}. Launches automatically.';
+    if (vertical) {
+      return _VerticalCountdown(
+        seconds: seconds,
+        fraction: fraction,
+        warm: warm,
+        spoken: spoken,
+        trailColor: trailColor,
+        reducedMotion:
+            reducedMotion ||
+            MediaQuery.disableAnimationsOf(context) ||
+            MediaQuery.reduceMotionOf(context),
+        urgent: urgent,
+        expired: expired,
+        complete: complete,
+        paused: paused,
+      );
+    }
     if (prominent) {
       return _ProminentCountdown(
         remaining: remaining,
@@ -204,6 +223,269 @@ class LaunchCountdown extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A vertical ascent instrument for a narrow strip beside the board. The
+/// parent places it below native system indicators and supplies clock values.
+/// Incoming clock updates are interpolated briefly; there is no idle ticker.
+class _VerticalCountdown extends StatelessWidget {
+  const _VerticalCountdown({
+    required this.seconds,
+    required this.fraction,
+    required this.warm,
+    required this.spoken,
+    required this.trailColor,
+    required this.reducedMotion,
+    required this.urgent,
+    required this.expired,
+    required this.complete,
+    required this.paused,
+  });
+
+  final int seconds;
+  final double fraction, warm;
+  final String spoken;
+  final Color trailColor;
+  final bool reducedMotion, urgent, expired, complete, paused;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = complete
+        ? Palette.rust
+        : paused
+        ? Palette.secondary
+        : expired
+        ? const Color(0xFFE5A18D)
+        : urgent
+        ? const Color(0xFFF2C27B)
+        : Palette.light;
+    final caption = complete
+        ? 'LAUNCHED'
+        : expired
+        ? 'TIME UP'
+        : paused
+        ? 'PAUSED'
+        : 'LAUNCH';
+    return Semantics(
+      key: const ValueKey('launch-countdown'),
+      container: true,
+      label: 'Launch countdown',
+      value: spoken,
+      liveRegion: expired || complete,
+      child: ExcludeSemantics(
+        child: MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: MediaQuery.textScalerOf(context)
+                .clamp(maxScaleFactor: 1.25),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                height: 48,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      complete ? '✓' : '${seconds}s',
+                      key: const ValueKey('launch-seconds'),
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 38,
+                        height: 1,
+                        fontWeight: FontWeight.w500,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(
+                height: 16,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      caption,
+                      style: TextStyle(
+                        color: paused || urgent || expired
+                            ? color
+                            : Palette.secondary,
+                        fontSize: 9,
+                        height: 1,
+                        letterSpacing: 1.3,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, bounds) {
+                    final craftWidth = math.min(54.0, bounds.maxWidth);
+                    final craftHeight = craftWidth * 58 / 54;
+                    final top = craftHeight / 2 + 7;
+                    final bottom = math.max(
+                      top,
+                      bounds.maxHeight - craftHeight / 2 - 10,
+                    );
+                    return TweenAnimationBuilder<double>(
+                      tween: Tween(end: complete || expired ? 0 : fraction),
+                      duration: reducedMotion || paused || expired || complete
+                          ? Duration.zero
+                          : const Duration(milliseconds: 200),
+                      curve: Curves.linear,
+                      builder: (context, value, child) {
+                        final centerY = top + (bottom - top) * value;
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            CustomPaint(
+                              key: const ValueKey('launch-time-rail'),
+                              painter: _AscentRailPainter(
+                                fraction: value,
+                                color: color,
+                                top: top,
+                                bottom: bottom,
+                                showGlow: !reducedMotion && !paused,
+                              ),
+                            ),
+                            Positioned(
+                              left: (bounds.maxWidth - craftWidth) / 2,
+                              top: centerY - craftHeight / 2,
+                              width: craftWidth,
+                              height: craftHeight,
+                              child: child!,
+                            ),
+                          ],
+                        );
+                      },
+                      child: RepaintBoundary(
+                        key: const ValueKey('countdown-rocket'),
+                        child: RotatedBox(
+                          key: const ValueKey(
+                            'vertical-launch-craft-orientation',
+                          ),
+                          quarterTurns: 3,
+                          child: CustomPaint(
+                            painter: CountdownRocketPainter(
+                              heat: paused ? warm * .3 : warm,
+                              trailColor: trailColor,
+                              urgent: urgent || complete || expired,
+                              reducedMotion: reducedMotion,
+                              complete: complete,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AscentRailPainter extends CustomPainter {
+  const _AscentRailPainter({
+    required this.fraction,
+    required this.color,
+    required this.top,
+    required this.bottom,
+    required this.showGlow,
+  });
+
+  final double fraction, top, bottom;
+  final Color color;
+  final bool showGlow;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final x = size.width / 2;
+    final y = top + (bottom - top) * fraction;
+    canvas.drawLine(
+      Offset(x, top),
+      Offset(x, bottom),
+      Paint()
+        ..color = Palette.line.withValues(alpha: .7)
+        ..strokeWidth = 1,
+    );
+    // Thirty small launch divisions keep the quiet side rail legible at a
+    // glance. Filled travel grows upward behind the climbing craft.
+    for (var tick = 0; tick <= 30; tick++) {
+      final tickY = top + (bottom - top) * tick / 30;
+      final major = tick % 5 == 0;
+      canvas.drawLine(
+        Offset(x - (major ? 7 : 3), tickY),
+        Offset(x + (major ? 7 : 3), tickY),
+        Paint()
+          ..color = (tickY >= y ? color : Palette.secondary).withValues(
+            alpha: major ? .35 : .16,
+          )
+          ..strokeWidth = .8,
+      );
+    }
+    if (y < bottom) {
+      final travel = Rect.fromLTRB(x - 2, y, x + 2, bottom);
+      canvas.drawLine(
+        Offset(x, bottom),
+        Offset(x, y),
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              color.withValues(alpha: .85),
+              color.withValues(alpha: .12),
+            ],
+          ).createShader(travel)
+          ..strokeWidth = 2
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+    if (showGlow) {
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset(x, y + 9), width: 12, height: 24),
+        Paint()
+          ..color = color.withValues(alpha: .12)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
+      );
+    }
+    canvas.drawCircle(
+      Offset(x, top),
+      4,
+      Paint()
+        ..color = color.withValues(alpha: .65)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+    for (final pad in [(10.0, 7.0), (5.0, 11.0)]) {
+      canvas.drawLine(
+        Offset(x - pad.$1, bottom + pad.$2),
+        Offset(x + pad.$1, bottom + pad.$2),
+        Paint()
+          ..color = Palette.secondary.withValues(alpha: .45)
+          ..strokeWidth = 1
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_AscentRailPainter old) =>
+      fraction != old.fraction ||
+      color != old.color ||
+      top != old.top ||
+      bottom != old.bottom ||
+      showGlow != old.showGlow;
 }
 
 /// The mobile launch instrument occupies a fixed 76px (64px in dense mode).

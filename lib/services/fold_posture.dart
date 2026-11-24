@@ -14,6 +14,7 @@ class FoldGeometry {
   const FoldGeometry({
     this.viewport = Size.zero,
     this.divisions = const <Rect>[],
+    this.layoutDivisions = const <Rect>[],
     this.occlusions = const <Rect>[],
     this.status = HingePosture.unavailable,
     this.supported = false,
@@ -21,6 +22,10 @@ class FoldGeometry {
 
   final Size viewport;
   final List<Rect> divisions;
+
+  /// Includes inactive creases on an unfolded display. Keeping these anchors
+  /// prevents the board from changing panes as the hinge reaches flat.
+  final List<Rect> layoutDivisions;
   final List<Rect> occlusions;
   final HingePosture status;
   final bool supported;
@@ -37,6 +42,7 @@ class FoldGeometry {
     return FoldGeometry(
       viewport: Size(width, height),
       divisions: _regions(event['divisions']),
+      layoutDivisions: _regions(event['layoutDivisions']),
       occlusions: _regions(event['occlusions']),
       status: HingePosture.values.firstWhere(
         (value) => value.name == event['status'],
@@ -54,14 +60,26 @@ class FoldGeometry {
       (viewport.height - currentViewport.height).abs() <= 1;
 
   Rect? horizontalDivision(Size currentViewport) =>
-      _division(currentViewport, horizontal: true);
+      _division(currentViewport, divisions, horizontal: true);
 
   Rect? verticalDivision(Size currentViewport) =>
-      _division(currentViewport, horizontal: false);
+      _division(currentViewport, divisions, horizontal: false);
 
-  Rect? _division(Size size, {required bool horizontal}) {
+  Rect? horizontalLayoutDivision(Size currentViewport) => _division(
+    currentViewport,
+    layoutDivisions.isEmpty ? divisions : layoutDivisions,
+    horizontal: true,
+  );
+
+  Rect? verticalLayoutDivision(Size currentViewport) => _division(
+    currentViewport,
+    layoutDivisions.isEmpty ? divisions : layoutDivisions,
+    horizontal: false,
+  );
+
+  Rect? _division(Size size, List<Rect> regions, {required bool horizontal}) {
     if (!matchesViewport(size)) return null;
-    final candidates = divisions.where((frame) {
+    final candidates = regions.where((frame) {
       if (!frame.isFinite || frame.width < 0 || frame.height < 0) return false;
       if (horizontal) {
         return frame.width > frame.height &&
@@ -110,6 +128,7 @@ class FoldGeometry {
       other is FoldGeometry &&
       viewport == other.viewport &&
       listEquals(divisions, other.divisions) &&
+      listEquals(layoutDivisions, other.layoutDivisions) &&
       listEquals(occlusions, other.occlusions) &&
       status == other.status &&
       supported == other.supported;
@@ -118,6 +137,7 @@ class FoldGeometry {
   int get hashCode => Object.hash(
     viewport,
     Object.hashAll(divisions),
+    Object.hashAll(layoutDivisions),
     Object.hashAll(occlusions),
     status,
     supported,
