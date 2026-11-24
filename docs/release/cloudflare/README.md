@@ -1,6 +1,6 @@
 # Deploy to Cloudflare Pages
 
-Use the **prebuilt Cloudflare ZIP attached to the repository's GitHub Release**. Uploading a prebuilt package requires only a browser and a Cloudflare account; no local Flutter, Blender, Node or AWS installation is needed. The repository contains source and build instructions; generated web files stay in release assets so each code change does not add another large binary tree to Git history.
+Use a **prebuilt Cloudflare ZIP** after reviewing the matching source and package. The latest source version, 0.11.4, is committed; its verified ZIP is currently a local review artifact and has not been attached to a public GitHub Release. The last public pre-release is 0.11.3. Uploading a prebuilt package requires only a browser and a Cloudflare account; no local Flutter, Blender, Node or AWS installation is needed. The repository contains source and build instructions; generated web files stay out of Git history.
 
 ## Deploy from the development Mac
 
