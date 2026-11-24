@@ -9,6 +9,37 @@ import 'package:glowpath/ui/flight_support_panel.dart';
 import 'package:glowpath/ui/space_controls.dart';
 import 'package:glowpath/ui/design.dart';
 
+void expectFreeSupportPage(WidgetTester tester) {
+  expect(tester.takeException(), isNull);
+  expect(find.byType(Scrollable), findsNothing);
+  expect(
+    tester
+        .widgetList<OrbitMode>(find.byType(OrbitMode))
+        .map((mode) => mode.label),
+    ['Hints', 'Skips'],
+  );
+  expect(find.byKey(const ValueKey('remove-ads')), findsNothing);
+  expect(
+    find.textContaining(
+      RegExp(
+        'ad-free|remove ads|purchase|unlock|restore',
+        caseSensitive: false,
+      ),
+    ),
+    findsNothing,
+  );
+  for (final element
+      in find
+          .byWidgetPredicate(
+            (widget) => widget is OrbitMode || widget is SpaceAction,
+          )
+          .evaluate()) {
+    final size = tester.getSize(find.byWidget(element.widget));
+    expect(size.width, greaterThanOrEqualTo(48));
+    expect(size.height, greaterThanOrEqualTo(48));
+  }
+}
+
 void main() {
   setUpAll(() async {
     await (FontLoader('Atkinson')..addFont(
@@ -27,7 +58,7 @@ void main() {
   ]) {
     for (final scale in [1.0, 3.0]) {
       testWidgets(
-        'support fits without scroll at $size / $scale and preview actions work',
+        'free support fits at $size / $scale and hint/skip rewards work',
         (tester) async {
           tester.view.physicalSize = size;
           tester.view.devicePixelRatio = 1;
@@ -60,40 +91,84 @@ void main() {
             ),
           );
           await tester.pump();
-          expect(tester.takeException(), isNull);
-          expect(find.byType(Scrollable), findsNothing);
+          expectFreeSupportPage(tester);
           await tester.tap(find.byKey(const ValueKey('skip-level')));
           await tester.pump();
           expect(skips, 1);
           expect(support.skipCredits, 0);
+          expect(
+            tester
+                .widget<SpaceAction>(find.byKey(const ValueKey('skip-level')))
+                .onPressed,
+            isNull,
+          );
           await tester.tap(find.byKey(const ValueKey('reward-skip')));
           await tester.pumpAndSettle();
           expect(support.skipCredits, 1);
-          expect(tester.takeException(), isNull);
+          expectFreeSupportPage(tester);
           await tester.tap(
             find.byWidgetPredicate(
               (widget) => widget is OrbitMode && widget.label == 'Hints',
             ),
           );
           await tester.pumpAndSettle();
-          expect(tester.takeException(), isNull);
+          expectFreeSupportPage(tester);
           await tester.tap(find.byKey(const ValueKey('reward-hints')));
           await tester.pumpAndSettle();
           expect(support.hintCredits, 6);
+          expectFreeSupportPage(tester);
           await tester.tap(
             find.byWidgetPredicate(
-              (widget) => widget is OrbitMode && widget.label == 'Ad-free',
+              (widget) => widget is OrbitMode && widget.label == 'Skips',
             ),
           );
           await tester.pumpAndSettle();
-          expect(tester.takeException(), isNull);
-          await tester.tap(find.byKey(const ValueKey('remove-ads')));
+          await tester.tap(find.byKey(const ValueKey('skip-level')));
           await tester.pumpAndSettle();
-          expect(support.adFree, isTrue);
-          expect(tester.takeException(), isNull);
+          expect(skips, 2);
+          expect(support.skipCredits, 0);
+          expect(support.adFree, isFalse);
+          expectFreeSupportPage(tester);
           await tester.pumpWidget(const SizedBox());
         },
       );
     }
+  }
+  for (final initialPage in [-1, 2, 99]) {
+    testWidgets('support clamps legacy page $initialPage to hints or skips', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      final support = FlightSupport(mock: true);
+      await support.initialize();
+      addTearDown(support.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: gameTheme(),
+          home: Scaffold(
+            body: FlightSupportPanel(
+              support: support,
+              onSkip: () {},
+              initialPage: initialPage,
+              reduceMotion: true,
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expectFreeSupportPage(tester);
+      expect(
+        tester
+            .widgetList<OrbitMode>(find.byType(OrbitMode))
+            .singleWhere((mode) => mode.selected)
+            .label,
+        initialPage < 0 ? 'Hints' : 'Skips',
+      );
+      expect(
+        find.byKey(ValueKey(initialPage < 0 ? 'reward-hints' : 'reward-skip')),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox());
+    });
   }
 }

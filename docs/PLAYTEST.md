@@ -1,6 +1,6 @@
-# Glowpath 0.6 review: ten minutes per person
+# Glowpath review: ten minutes per person
 
-Use a build labelled **0.6.0+13**. The current review uses local mocks: rivals are simulated, reward buttons show no ads, and the ad-free preview charges nothing. No shared leaderboard or cloud account is connected.
+Use a build labelled **0.11.2+32** or later. The public preview is free, with ads and purchases off. Explicit mock builds label simulated rivals and rewards. No shared leaderboard or cloud account is connected.
 
 ## Discover and play
 
@@ -8,8 +8,8 @@ Use a build labelled **0.6.0+13**. The current review uses local mocks: rivals a
 2. Play three Voyage routes. Record actual attempts, moves, hints and seconds left. Was the 30-second limit exciting, understandable or frustrating? Could they understand why a route failed?
 3. Let the clock expire once. Verify the lost-rocket sequence and obvious Retry; edits should remain. Try Undo and the two-step hint.
 4. Try Daily and Weekly. Read each new-rule briefing and check whether its symbols make sense on the board. Reading must not consume mission time.
-5. Open flight support. Try demo hint credits, a skip and the ad-free preview. A skip must advance without awarding stars. Open the demo league and switch Daily/Weekly; simulated rivals must be obvious.
-6. On reaching a new planet, review the cockpit film and next-sector conversation. Check that Skip is immediate, the film fills the screen, and the next countdown waits for the briefing to finish.
+5. Open flight support. Check Hints and Skips, and confirm there are no paid unlock or restore offers. A skip must advance without awarding stars. In an explicit mock build, try demo rewards and the demo league; simulated rivals must be obvious.
+6. On reaching a new planet, review the flight sequence and next-sector briefing. Check that Skip is immediate, the flight fills the screen, and the next countdown waits for the briefing to finish.
 
 Do not wipe existing progress to create a first-run test. Use a fresh tester installation or isolated local browser origin. Mock skip rewards can advance through later sectors for obstacle review, but skipped routes should not be counted as completed player tests.
 
@@ -31,7 +31,7 @@ Do not wipe existing progress to create a first-run test. Use a fresh tester ins
 - Reduce Motion and Touch feedback preferences: calm/static alternatives work, with no haptics while paused/backgrounded.
 - Lock/unlock, switch apps and reopen: board edits, progress, stars and demo balances persist; reading and backgrounding pause active time.
 - Airplane mode: all game, cinematic and demo service features still work.
-- On iPhone 8, specifically note heat, stutter and the 1440px cinematic playback. Mac/browser tests do not establish device performance.
+- On iPhone 8, specifically note heat, stutter and flight animation performance. Mac/browser tests do not establish device performance.
 
 ## Feedback to record
 

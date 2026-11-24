@@ -147,7 +147,7 @@ class _FlightSettingsState extends State<FlightSettings> {
           children: [
             Expanded(
               child: Semantics(
-                hint: 'Hints, skips and ad-free options',
+                hint: 'Hints and skips',
                 child: resourceActions[0],
               ),
             ),
@@ -267,7 +267,7 @@ class _FlightSettingsState extends State<FlightSettings> {
               widget.demo
                   ? (dense
                         ? 'No ads. No payments.'
-                        : 'Your voyage stays on this device. League rivals, ad rewards and purchases are simulated.')
+                        : 'Your voyage stays on this device. League rivals and ad rewards are simulated.')
                   : (dense
                         ? 'Saved on this device.'
                         : 'Your voyage saves locally. Joining the league shares challenge scores under an anonymous callsign.'),

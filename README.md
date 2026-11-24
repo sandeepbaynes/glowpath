@@ -25,6 +25,10 @@ Draw a route from **START**, collect three stars, and reach **FINISH** before th
 - **Optional discoveries:** take a detour for cargo, earn coins, unlock trails and achievements, and inspect collected objects in a rotatable 3D gallery.
 - **A shared experience across screens:** mouse, touch and keyboard input; responsive phone/tablet layouts; and fold-aware gameplay with mission information on one side of the fold and the board on the other.
 
+The current plan is free access on phones, tablets, foldables, the web and a future watch edition: no paid downloads, subscriptions, in-app purchases, paywalled levels or currency bought with money. Coins are earned through play. Ads remain off; phone and web advertising may help fund the game later.
+
+The planned watch edition will offer a complete, ad-free game that can be played on its own, with an optional, unobtrusive way to discover the phone app. Watch gameplay and earned-reward sync between watch and phone are not implemented yet.
+
 <p align="center">
   <img src="docs/showcase/gameplay.png" width="290" alt="Mobile puzzle with a launch countdown, START and FINISH markers, and a four-by-four routing board">
   &nbsp;&nbsp;

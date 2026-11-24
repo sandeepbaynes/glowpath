@@ -7,9 +7,9 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_storekit/store_kit_2_wrappers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Review builds remain free. Live SDKs activate only with deliberate build
-/// configuration. Explicit MOCK_SERVICES builds use separate local demo data;
-/// their simulated rewards and purchases never enter a live entitlement store.
+/// All shipped clients remain free. Payments are paused by product policy;
+/// build flags cannot enable them. The explicit constructor override preserves
+/// isolated adapter tests. MOCK_SERVICES rewards use separate local demo data.
 class FlightSupport extends ChangeNotifier {
   FlightSupport({
     bool? ads,
@@ -48,7 +48,7 @@ class FlightSupport extends ChangeNotifier {
   bool _storeInitialized = false;
   int _entitlementEpoch = 0;
   static const adsEnabled = bool.fromEnvironment('ENABLE_ADS');
-  static const purchasesEnabled = bool.fromEnvironment('ENABLE_PURCHASES');
+  static const purchasesEnabled = false;
   static const productId = 'app.glowpath.remove_ads';
   static const _iosReward = String.fromEnvironment(
     'IOS_REWARDED_AD',
@@ -68,7 +68,8 @@ class FlightSupport extends ChangeNotifier {
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.iOS ||
           defaultTargetPlatform == TargetPlatform.android);
-  bool get canBuy => !busy && (isMock ? !adFree : product != null);
+  bool get canBuy =>
+      _purchasesEnabled && !busy && (isMock ? !adFree : product != null);
   String get price =>
       isMock ? 'Preview' : product?.price ?? 'Not available yet';
   int get hintCredits => _hintCredits;
@@ -271,6 +272,11 @@ class FlightSupport extends ChangeNotifier {
   }
 
   Future<void> restore() async {
+    if (!_purchasesEnabled) {
+      message = 'Glowpath is free to play. Purchases are disabled.';
+      _notify();
+      return;
+    }
     if (isMock) {
       await (_creditLoading ??= _loadCredits());
       message = adFree

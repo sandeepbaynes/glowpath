@@ -19,14 +19,13 @@ void main() {
   tearDown(() => debugDefaultTargetPlatformOverride = null);
 
   test(
-    'mock support grants explicit demos without contacting a store or ad SDK',
+    'mock rewards remain available without purchase offers or store access',
     () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       var storeReads = 0;
       final support = FlightSupport(
         mock: true,
         ads: true,
-        purchases: true,
         entitlementReader: () async {
           storeReads++;
           throw StateError('Must not contact store');
@@ -35,7 +34,7 @@ void main() {
       await support.initialize();
       expect(support.isMock, isTrue);
       expect(support.reviewMode, isFalse);
-      expect(support.canBuy, isTrue);
+      expect(support.canBuy, isFalse);
       expect(support.price, 'Preview');
       expect(await support.earnReward(skip: false), isTrue);
       expect(support.hintCredits, 6);
@@ -43,20 +42,20 @@ void main() {
       expect(await support.earnReward(skip: true), isTrue);
       expect(support.skipCredits, 2);
       await support.buy();
-      expect(support.adFree, isTrue);
+      expect(support.adFree, isFalse);
       expect(support.canBuy, isFalse);
-      expect(support.message, contains('no payment'));
       await support.restore();
+      expect(support.message, contains('Purchases are disabled'));
       await support.refreshEntitlements();
       await support.privacyOptions();
       expect(storeReads, 0);
       expect(support.consumeSkip(), isTrue);
-      expect(support.skipCredits, 2); // Mock purchase makes support unlimited.
+      expect(support.skipCredits, 1);
       support.dispose();
     },
   );
 
-  test('mock credits and mock entitlement persist without entering production storage', () async {
+  test('mock credits persist without adding paid entitlements or entering production storage', () async {
     final original = jsonEncode({'version': 1, 'hints': 1, 'skips': 0});
     SharedPreferences.setMockInitialValues({
       FlightSupport.creditStorageKey: original,
@@ -72,7 +71,7 @@ void main() {
     await preview.initialize();
     expect(preview.hintCredits, 2);
     expect(preview.skipCredits, 2);
-    expect(preview.adFree, isTrue);
+    expect(preview.adFree, isFalse);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString(FlightSupport.creditStorageKey), original);
     preview.dispose();

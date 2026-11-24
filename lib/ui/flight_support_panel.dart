@@ -5,7 +5,7 @@ import 'space_controls.dart';
 import 'design.dart';
 import 'observatory_art.dart';
 
-/// One resource at a time keeps every action visible without a scrolling shop.
+/// One resource at a time keeps every action visible without scrolling.
 class FlightSupportPanel extends StatefulWidget {
   const FlightSupportPanel({
     super.key,
@@ -24,7 +24,7 @@ class FlightSupportPanel extends StatefulWidget {
 }
 
 class _FlightSupportPanelState extends State<FlightSupportPanel> {
-  late int _page = widget.initialPage;
+  late int _page = widget.initialPage.clamp(0, 1);
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.support,
@@ -46,22 +46,14 @@ class _FlightSupportPanelState extends State<FlightSupportPanel> {
             support.adFree || support.reviewMode
                 ? (dense ? '∞ hints' : 'Hints included')
                 : '${support.hintCredits} hints',
-          1 =>
+          _ =>
             support.adFree || support.reviewMode
                 ? (dense ? '∞ skips' : 'Skips included')
                 : '${support.skipCredits} ${support.skipCredits == 1 ? 'skip' : 'skips'}',
-          _ =>
-            support.adFree
-                ? (dense ? 'Unlocked' : 'Ad-free flight')
-                : (dense ? 'Ad-free' : 'Remove ads'),
         };
         final explanation = switch (_page) {
           0 => dense ? 'One legal turn.' : 'Get one legal turn when you need a nudge. Return to the board to use it.',
-          1 => dense ? 'No stars.' : 'Move to the next Voyage route. A skip earns no stars or league score.',
-          _ =>
-            dense
-                ? 'Hints & skips.'
-                : 'One purchase includes ad-free play, hints and Voyage skips.',
+          _ => dense ? 'No stars.' : 'Move to the next Voyage route. A skip earns no stars or league score.',
         };
         final shortWide = bounds.maxWidth > 460 && bounds.maxHeight < 420;
         final summary = Column(
@@ -73,11 +65,7 @@ class _FlightSupportPanelState extends State<FlightSupportPanel> {
                 style: TextStyle(color: Palette.rust, fontSize: 10),
               ),
             if (!dense) ...[
-              OrbitalEmblem(
-                size: 86,
-                variant: _page + 1,
-                color: _page == 2 ? Palette.light : Palette.rust,
-              ),
+              OrbitalEmblem(size: 86, variant: _page + 1, color: Palette.rust),
               const SizedBox(height: 14),
             ],
             Text(
@@ -115,7 +103,7 @@ class _FlightSupportPanelState extends State<FlightSupportPanel> {
               ),
               if (rewards) const SizedBox(height: 8),
             ],
-            if (_page < 2 && rewards)
+            if (rewards)
               SpaceAction(
                 key: ValueKey(_page == 0 ? 'reward-hints' : 'reward-skip'),
                 label: preview && dense
@@ -129,35 +117,6 @@ class _FlightSupportPanelState extends State<FlightSupportPanel> {
                     : () => support.earnReward(skip: _page == 1),
                 reduceMotion: widget.reduceMotion,
               ),
-            if (_page == 2) ...[
-              SpaceAction(
-                key: const ValueKey('remove-ads'),
-                label: support.adFree
-                    ? 'Unlocked'
-                    : preview
-                    ? (dense ? 'Unlock' : 'Preview unlock')
-                    : support.canBuy
-                    ? 'Remove ads · ${support.price}'
-                    : 'Store opens at launch',
-                compact: true,
-                onPressed: support.canBuy && !support.adFree
-                    ? support.buy
-                    : null,
-                reduceMotion: widget.reduceMotion,
-              ),
-              if (preview || FlightSupport.purchasesEnabled) ...[
-                const SizedBox(height: 8),
-                SpaceAction(
-                  label: preview
-                      ? (dense ? 'Restore' : 'Preview restore')
-                      : 'Restore purchases',
-                  quiet: true,
-                  compact: true,
-                  onPressed: support.busy ? null : support.restore,
-                  reduceMotion: widget.reduceMotion,
-                ),
-              ],
-            ],
             if (support.message != null && dense)
               Semantics(
                 liveRegion: true,
@@ -225,11 +184,7 @@ class _FlightSupportPanelState extends State<FlightSupportPanel> {
             ),
             Row(
               children: [
-                for (final (index, title) in [
-                  'Hints',
-                  'Skips',
-                  'Ad-free',
-                ].indexed)
+                for (final (index, title) in ['Hints', 'Skips'].indexed)
                   Expanded(
                     child: OrbitMode(
                       label: title,

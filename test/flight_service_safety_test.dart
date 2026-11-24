@@ -25,6 +25,10 @@ void main() {
       expect(support.reviewMode, isTrue);
       expect(support.adFree, isFalse);
       expect(support.canBuy, isFalse);
+      await support.buy();
+      await support.restore();
+      expect(support.adFree, isFalse);
+      expect(support.message, contains('Purchases are disabled'));
       for (var i = 0; i < 20; i++) {
         expect(support.consumeHint(), isTrue);
         expect(support.consumeSkip(), isTrue);
