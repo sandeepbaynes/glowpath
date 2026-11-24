@@ -21,6 +21,8 @@ class GameAnalytics {
     'level_skip',
     'hint_used',
     'ad_eligible',
+    'ad_request',
+    'ad_paid',
     'ad_impression',
     'ad_closed',
     'ad_reward',
@@ -33,6 +35,9 @@ class GameAnalytics {
     'timeBucket',
     'placement',
     'outcome',
+    'valueMicros',
+    'currency',
+    'precision',
   };
 
   SharedPreferences? _preferences;
@@ -43,28 +48,41 @@ class GameAnalytics {
       throw ArgumentError.value(name, 'name', 'Unknown analytics event');
     }
     if (fields.keys.any((key) => !allowedFields.contains(key))) {
-      throw ArgumentError.value(fields.keys, 'fields', 'Unknown analytics field');
+      throw ArgumentError.value(
+        fields.keys,
+        'fields',
+        'Unknown analytics field',
+      );
     }
     final safe = <String, Object?>{};
     for (final entry in fields.entries) {
       final value = entry.value;
-      if (value is bool || value is int ||
-          (value is String && value.length <= 40 &&
+      if (value is bool ||
+          value is int ||
+          (value is String &&
+              value.length <= 40 &&
               RegExp(r'^[a-zA-Z0-9_-]*$').hasMatch(value))) {
         safe[entry.key] = value;
       } else {
-        throw ArgumentError.value(value, entry.key, 'Unsupported analytics value');
+        throw ArgumentError.value(
+          value,
+          entry.key,
+          'Unsupported analytics value',
+        );
       }
     }
     _queue = _queue.then((_) async {
-      final preferences = _preferences ??= await SharedPreferences.getInstance();
+      final preferences = _preferences ??=
+          await SharedPreferences.getInstance();
       final current = preferences.getStringList(storageKey) ?? <String>[];
-      current.add(jsonEncode({
-        'v': 1,
-        'name': name,
-        'time': DateTime.now().toUtc().toIso8601String(),
-        'fields': safe,
-      }));
+      current.add(
+        jsonEncode({
+          'v': 1,
+          'name': name,
+          'time': DateTime.now().toUtc().toIso8601String(),
+          'fields': safe,
+        }),
+      );
       if (current.length > maxEvents) {
         current.removeRange(0, current.length - maxEvents);
       }

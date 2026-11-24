@@ -4,8 +4,8 @@
         android:label="Glowpath"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-        <!-- Official Google test application ID. -->
-        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713"/>
+        <!-- Glowpath production application ID. Ad requests require ENABLE_ADS. -->
+        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3704137344359613~5449706481"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

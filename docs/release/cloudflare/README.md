@@ -1,6 +1,6 @@
 # Deploy to Cloudflare Pages
 
-Use a **prebuilt Cloudflare ZIP** after reviewing the matching source and package. The latest source version, 0.11.4, is committed; its verified ZIP is currently a local review artifact and has not been attached to a public GitHub Release. The last public pre-release is 0.11.3. Uploading a prebuilt package requires only a browser and a Cloudflare account; no local Flutter, Blender, Node or AWS installation is needed. The repository contains source and build instructions; generated web files stay out of Git history.
+The Pages project is `glowpath`, with [glowpath-38p.pages.dev](https://glowpath-38p.pages.dev/) as its public address. Use a prebuilt Cloudflare ZIP or the generated directory after reviewing the matching source and package. Uploading a prebuilt package requires only a browser and a Cloudflare account; no local Flutter, Blender, Node or AWS installation is needed. The repository contains source and build instructions; generated web files stay out of Git history. See the [0.12.0 release status](../0.12.0.md) for deployment and device verification.
 
 ## Deploy from the development Mac
 
@@ -13,34 +13,42 @@ npm --prefix tools/cloudflare run profiles
 npm --prefix tools/cloudflare run projects
 ```
 
-Login creates an explicit named `glowpath` profile with account/profile read access and Pages write access. Its credentials are encrypted using a key in macOS Keychain. The scripts select that profile and keychain storage only for their own command; they do not replace Wrangler's default login, activate a directory binding, export global account variables, or modify shell startup files. Other projects keep their normal account selection. Review Cloudflare's authorization page before granting access. It does not request billing or DNS write permissions. Do not place credentials in this public repository.
+Login creates an explicit named `sandeepbaynes` profile with account/profile read access and Pages write access. Its credentials are encrypted using a key in macOS Keychain. The scripts select that profile and keychain storage only for their own command; they do not replace Wrangler's default login, activate a directory binding, export global account variables, or modify shell startup files. Other projects keep their normal account selection. Review Cloudflare's authorization page before granting access. It does not request billing or DNS write permissions. Do not place credentials in this public repository.
 
-The named profile is authenticated on the development Mac and `npm --prefix tools/cloudflare run projects` succeeds. It currently lists only an unrelated Pages project; there is no Glowpath Pages project or deployment yet. `npm --prefix tools/cloudflare run profiles` verifies that `glowpath` has no bound directories.
+The named profile is authenticated on the development Mac and `npm --prefix tools/cloudflare run projects` succeeds. `npm --prefix tools/cloudflare run profiles` verifies that `sandeepbaynes` has no bound directories. This profile can serve multiple Pages projects in the same Cloudflare account: reuse `--profile sandeepbaynes` and select the destination with `--project-name`. A separate profile is useful for a different account or different access permissions, not for each project.
 
-Build the verified upload directory with `python3 tools/package_web.py --target cloudflare --mode preview --base-href /`. Use `npm --prefix tools/cloudflare run wrangler -- pages deploy`, passing the generated directory as an absolute path and the intended `--project-name`. Wrangler uploads a directory, not the ZIP. If the login can access multiple accounts, set `CLOUDFLARE_ACCOUNT_ID` for that command to the intended account; do not export it globally. Create a Pages project only if it does not already exist; subsequent releases should update that project. Use these scoped npm commands instead of plain `wrangler login` or `wrangler logout`, which affect the default profile.
+Build the upload directory with `python3 tools/package_web.py --target cloudflare --mode public --base-href /`. From the repository root, deploy that directory with:
 
-The first hosted build remains a free preview with ads off. Advertising requires the separate browser integration described below.
+```sh
+npm --prefix tools/cloudflare run wrangler -- pages deploy \
+  "$PWD/build/review/glowpath-0.12.0-35-cloudflare-public-root" \
+  --project-name glowpath --branch main
+```
+
+Wrangler uploads a directory, not the ZIP. The absolute path is deliberate because npm runs the helper from `tools/cloudflare`. If the login can access multiple accounts, set `CLOUDFLARE_ACCOUNT_ID` for that command to the intended account; do not export it globally. An exported `CLOUDFLARE_API_TOKEN` takes precedence over a profile. To force the named login for one command, prefix it with `env -u CLOUDFLARE_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL -u CLOUDFLARE_ACCOUNT_ID`; this leaves the parent shell unchanged. Reuse the existing Pages project for subsequent releases. Use these scoped npm commands instead of plain `wrangler login` or `wrangler logout`, which affect the default profile.
+
+The public build is free and sends no ad requests. Publisher ownership metadata is configured for site review; web ad approval and browser integration remain separate work. Use `--mode preview` for a non-indexed review package without publisher metadata.
 
 ## Dashboard upload
 
-For version `0.11.4+34`, download these three matching release assets when attached to the release:
+For version `0.12.0+35`, the public packager creates these three matching artifacts. Download them from the matching GitHub Release only after they have been attached, or build them locally:
 
-- `glowpath-0.11.4-34-cloudflare-preview-root.zip` — the deployable site, with `index.html` directly at its root.
-- `glowpath-0.11.4-34-cloudflare-preview-root.json` — version, flags, file inventory and SHA-256 hashes.
-- `glowpath-0.11.4-34-cloudflare-preview-root.sha256` — checksum for the ZIP.
+- `glowpath-0.12.0-35-cloudflare-public-root.zip` — the deployable site, with `index.html` directly at its root.
+- `glowpath-0.12.0-35-cloudflare-public-root.json` — version, flags, file inventory, web-ad status and SHA-256 hashes.
+- `glowpath-0.12.0-35-cloudflare-public-root.sha256` — checksum for the ZIP.
 
-The ZIP is an **ad-free preview**, not a monetized release: real ads, purchases and mock transactions are disabled; no leaderboard endpoint is configured. Saves, scores and collections are local to each browser/origin. Moving to a custom domain creates a different save origin. No cloud backend is needed for this build.
+The ZIP has **no live ads**: real ads, purchases and mock transactions are disabled; no leaderboard endpoint is configured. Public mode includes the publisher meta tag, privacy/support pages and indexable headers. Saves, scores and collections are local to each browser/origin. Changing the website address creates a different save origin. No player account or gameplay backend is needed for this build.
 
 ## Upload a prebuilt package
 
-1. Download the matching ZIP, JSON and checksum from the repository's Releases page. Optional integrity check from their download directory: `shasum -a 256 -c glowpath-0.11.4-34-cloudflare-preview-root.sha256` (macOS) or `sha256sum -c glowpath-0.11.4-34-cloudflare-preview-root.sha256` (Linux). PowerShell can calculate it with `Get-FileHash <zip-file> -Algorithm SHA256`.
-2. In Cloudflare, open **Workers & Pages → Create application**, choose the Pages **Drag and drop** / **Direct Upload** flow, and name the project. Upload the **ZIP**, not GitHub's “Source code” archive and not the whole repository. No build command or environment variables are required.
-3. Deploy, then open the resulting `https://<project>.pages.dev/` address. For subsequent releases, use the existing project's **Create a new deployment** action.
+1. Download the matching ZIP, JSON and checksum from the repository's Releases page when available, or use the locally generated artifacts. Optional integrity check from their directory: `shasum -a 256 -c glowpath-0.12.0-35-cloudflare-public-root.sha256` (macOS) or `sha256sum -c glowpath-0.12.0-35-cloudflare-public-root.sha256` (Linux). PowerShell can calculate it with `Get-FileHash <zip-file> -Algorithm SHA256`.
+2. In Cloudflare, open the existing `glowpath` Pages project and choose **Create a new deployment**. Upload the ZIP containing the generated files, not GitHub's “Source code” archive or the whole repository. No build command or environment variables are required.
+3. Deploy to the production branch, then open [glowpath-38p.pages.dev](https://glowpath-38p.pages.dev/).
 4. Check first load, phone/tablet layout, solving a route, wormhole entry/exit, timeout/Retry, cargo/achievements, pause on backgrounding, and reload with saved progress. Hints/skips must not display real ad or payment prompts. These are deployment checks, not a substitute for physical-device review.
 
 Cloudflare accepts ZIPs through the dashboard; the current limits are 1,000 files and 25 MiB **per asset**. Packaging validates both. A Direct Upload project cannot later be converted to Git integration; automatic deployments would use a new project. [Cloudflare Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/).
 
-The bundled `_headers` asks browsers to revalidate on refresh and prevents search indexing during preview. No credentials are included. Hash navigation needs no route rewrite. Keep the `/` base path on `pages.dev` or a custom-domain root. [Cloudflare headers](https://developers.cloudflare.com/pages/configuration/headers/).
+The bundled `_headers` asks browsers to revalidate on refresh. Public mode permits indexing; preview and review modes prevent it. No credentials are included. Hash navigation needs no route rewrite. Keep the `/` base path for the Pages root. [Cloudflare headers](https://developers.cloudflare.com/pages/configuration/headers/).
 
 ## Build from source
 
@@ -49,7 +57,7 @@ From the repository root after the final version and source changes:
 ```sh
 flutter pub get
 python3 -m unittest discover -s tools -p 'test_package_web.py'
-python3 tools/package_web.py --target cloudflare --mode preview --base-href /
+python3 tools/package_web.py --target cloudflare --mode public --base-href /
 ```
 
 The script writes a fresh directory, ZIP, JSON and checksum under `build/review/`. It validates the compiled version, explicit service flags, local CanvasKit/fonts, hashed bootstrap/game references, upload limits and all archived file hashes. It neither signs in nor publishes. Rebuilding the same version replaces only that generated package. Attach the resulting ZIP/JSON/SHA256 files to the version's GitHub Release after committing the matching source.
@@ -57,7 +65,7 @@ The script writes a fresh directory, ZIP, JSON and checksum under `build/review/
 Verify a downloaded package without Flutter:
 
 ```sh
-python3 tools/package_web.py --verify-archive /path/to/glowpath-0.11.4-34-cloudflare-preview-root.zip
+python3 tools/package_web.py --verify-archive /path/to/glowpath-0.12.0-35-cloudflare-public-root.zip
 ```
 
 For a generic static host under a subdirectory, rebuild with `--target static --base-href /glowpath/ --mode preview`; serve it at that exact path. Do not relocate the Cloudflare root build into a subfolder. Hosting approval does not activate web ads: the H5 adapter, consent, publisher/site configuration and rewarded-ad verification remain separate work in [web release preparation](../../WEB_RELEASE.md).

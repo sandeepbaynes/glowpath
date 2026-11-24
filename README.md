@@ -8,8 +8,7 @@
 
 A space-routing puzzle for web, iPhone, iPad and Android. Designed by [Sandeep Baynes](https://github.com/sandeepbaynes), developed with AI coding agents, and refined through hands-on playtesting.
 
-> **Play in your browser — coming soon.** The Cloudflare Pages link will be added here after deployment.
-<!-- PLAY_URL: Replace the line above with the verified Cloudflare Pages URL when live. -->
+> **[Play Glowpath in your browser](https://glowpath-38p.pages.dev/)**
 
 [Download the web preview](https://github.com/sandeepbaynes/glowpath/releases) · [Build locally](#run-it-locally) · [Design & engineering notes](#explore-the-project)
 
@@ -25,9 +24,9 @@ Draw a route from **START**, collect three stars, and reach **FINISH** before th
 - **Optional discoveries:** take a detour for cargo, earn coins, unlock trails and achievements, and inspect collected objects in a rotatable 3D gallery.
 - **A shared experience across screens:** mouse, touch and keyboard input; responsive phone/tablet layouts; and a two-pane experience on partially open foldables. Gameplay, maps, briefings and panels keep content clear of the hinge.
 
-The current plan is free access on phones, tablets, foldables, the web and a future watch edition: no paid downloads, subscriptions, in-app purchases, paywalled levels or currency bought with money. Coins are earned through play. Ads remain off; phone and web advertising may help fund the game later.
+The current plan is free access on phones, tablets, foldables, the web and a future watch edition: no paid downloads, subscriptions, in-app purchases, paywalled levels or currency bought with money. Coins are earned through play. Native mobile advertising is being prepared with consent controls and test-device review. The public website serves no ads while AdSense/H5 approval and browser integration are pending.
 
-The planned watch edition will offer a complete, ad-free game that can be played on its own, with an optional, unobtrusive way to discover the phone app. An [experimental native watchOS preview](watch/README.md) includes a small routing board, timed flights, hints and local scores. It builds with the watchOS SDK; simulator playtesting is pending runtime installation. The full watch edition, phone discovery and earned-reward sync are not implemented yet.
+The planned watch edition will offer a complete, ad-free game that can be played on its own, with an optional, unobtrusive way to discover the phone app. An [experimental native watchOS preview](watch/README.md) includes a small routing board, timed flights, hints and local scores. It builds with the watchOS SDK; the simulator runtime is installed and playtesting remains pending. The full watch edition, phone discovery and earned-reward sync are not implemented yet.
 
 ### Designed for each device
 
@@ -75,7 +74,7 @@ The project uses **Flutter and Dart**, with a small Swift bridge for iOS fold ge
 
 Procedural levels are deterministic and checked for legal solutions. Tests cover connected routes, coupled tiles, independent crossing lanes, portal transfers, replay validation, rewards and save migration. Layout checks exercise phones, tablets, fold postures, enlarged text and touch-target bounds. Reduced motion, semantic labels and keyboard controls are implemented; physical-device accessibility and performance review continue.
 
-**0.11.4 validation:** 905 Flutter tests pass, with clean static analysis. Fold review includes the iPhone simulator and synthetic Android clamshell layouts; physical-device review continues. These checks establish behavior within the tested cases; player enjoyment is evaluated by playing the game. [Read the verification notes](docs/release/0.11.4.md).
+The previous **0.11.4** baseline passed 905 Flutter tests and static analysis. Fold review included the iPhone simulator and synthetic Android clamshell layouts; physical-device review continues. The [0.12.0 release notes](docs/release/0.12.0.md) track the public web package and native ad integration separately from that earlier validation. These checks establish behavior within the tested cases; player enjoyment is evaluated by playing the game.
 
 ## Run it locally
 
@@ -98,17 +97,17 @@ python3 -m unittest discover -s tools -p 'test_package_web.py'
 
 For iOS, select your own signing team in Xcode. Android store distribution requires your own upload-key configuration; the current release configuration uses debug signing for local review.
 
-## Deploy the web preview
+## Deploy the web build
 
-Download the Cloudflare ZIP from [Releases](https://github.com/sandeepbaynes/glowpath/releases), or build it yourself:
+Build the public Cloudflare package with publisher ownership metadata, privacy and support pages:
 
 ```sh
-python3 tools/package_web.py --target cloudflare --mode preview --base-href /
+python3 tools/package_web.py --target cloudflare --mode public --base-href /
 ```
 
-The package contains self-hosted fonts and renderer files, a file inventory and SHA-256 checksums. Upload the ZIP through Cloudflare Pages Direct Upload. [Deployment guide](docs/release/cloudflare/README.md).
+The package contains self-hosted fonts and renderer files, a file inventory and SHA-256 checksums. Public mode remains free of advertising requests until web approval and integration are complete. Use `--mode preview` for a non-indexed review build without publisher metadata, or download an available package from [Releases](https://github.com/sandeepbaynes/glowpath/releases). [Deployment guide](docs/release/cloudflare/README.md).
 
-**Current status:** playable preview, under active development. The web URL and store links will be added when available. Live ads, purchases, Game Center and cross-device sync are not connected. The public preview needs no backend account.
+**Current status:** playable game under active development, with [glowpath-38p.pages.dev](https://glowpath-38p.pages.dev/) as its public web address. Native ad integration uses the real AdMob account identifiers and consent controls; owner-device review uses test advertising. Web advertising, purchases, Game Center and cross-device sync are not active. The website needs no player account. Read the [privacy notice](https://glowpath-38p.pages.dev/privacy.html) or [get support](https://glowpath-38p.pages.dev/support.html).
 
 ## Explore the project
 
@@ -124,7 +123,7 @@ The package contains self-hosted fonts and renderer files, a file inventory and 
 
 Useful reading: [interaction research](docs/design/RESEARCH_EVIDENCE_0_3.md), [visual direction](docs/design/ORBITAL_ART.md), [progression and rewards](docs/design/VOYAGE_REWARDS_0_8.md), and [playtesting](docs/PLAYTEST.md).
 
-The [ad and first-party measurement plan](docs/release/AD_AND_ANALYTICS_PLAN.md) records proposed placements and launch gates. The preview contains no live ads or event uploads.
+The [ad and first-party measurement plan](docs/release/AD_AND_ANALYTICS_PLAN.md) records placements, test-device setup and launch gates. The web build makes no ad requests or backend event uploads; game progress and its bounded event journal remain local to the browser.
 
 Feedback is welcome through [GitHub Issues](https://github.com/sandeepbaynes/glowpath/issues). Include your device/browser, steps to reproduce, and what you expected to happen.
 

@@ -23,10 +23,14 @@ class FlightSettings extends StatefulWidget {
     required this.onRewards,
     required this.onLicenses,
     this.demo = false,
+    this.onAdPrivacy,
+    this.onPrivacyPolicy,
+    this.onHelpSite,
   });
   final GameController game;
   final VoidCallback onRestart, onSupport, onLeague, onRewards, onLicenses;
   final bool demo;
+  final VoidCallback? onAdPrivacy, onPrivacyPolicy, onHelpSite;
   @override
   State<FlightSettings> createState() => _FlightSettingsState();
 }
@@ -47,7 +51,7 @@ class _FlightSettingsState extends State<FlightSettings> {
             MediaQuery.disableAnimationsOf(context) ||
             MediaQuery.reduceMotionOf(context);
         final largeType = MediaQuery.textScalerOf(context).scale(1) >= 1.3;
-        final dense = largeType || bounds.maxHeight < 500;
+        final dense = largeType || bounds.maxHeight < 600;
         final roomy = !dense;
         final shortPane = bounds.maxHeight < 330;
 
@@ -256,6 +260,37 @@ class _FlightSettingsState extends State<FlightSettings> {
           reduceMotion: reduced,
           icon: Icons.info_outline_rounded,
         );
+        final adPrivacy = widget.onAdPrivacy == null
+            ? null
+            : SpaceAction(
+                label: 'Ad privacy choices',
+                icon: Icons.privacy_tip_outlined,
+                quiet: true,
+                compact: true,
+                reduceMotion: reduced,
+                onPressed: widget.onAdPrivacy,
+              );
+        final publicLinks = <Widget>[
+          if (widget.onPrivacyPolicy != null)
+            SpaceAction(
+              label: 'Privacy policy',
+              icon: Icons.policy_outlined,
+              quiet: true,
+              compact: true,
+              reduceMotion: reduced,
+              onPressed: widget.onPrivacyPolicy,
+            ),
+          if (widget.onHelpSite != null)
+            SpaceAction(
+              label: 'Support',
+              icon: Icons.help_outline_rounded,
+              quiet: true,
+              compact: true,
+              reduceMotion: reduced,
+              onPressed: widget.onHelpSite,
+            ),
+          ?adPrivacy,
+        ];
         final privacyColumn = Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -286,7 +321,7 @@ class _FlightSettingsState extends State<FlightSettings> {
               const Padding(
                 padding: EdgeInsets.only(top: 16),
                 child: Text(
-                  'GLOWPATH  /  0.10.7',
+                  'GLOWPATH  /  0.12.0',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 11,
@@ -371,8 +406,13 @@ class _FlightSettingsState extends State<FlightSettings> {
                     ),
                   ],
           _ =>
-            dense
-                ? <Widget>[collection, privacy, licenses]
+            dense || bounds.maxHeight < 650
+                ? <Widget>[
+                    collection,
+                    privacy,
+                    if (dense) licenses,
+                    ...publicLinks,
+                  ]
                 : <Widget>[
                     Column(
                       mainAxisSize: MainAxisSize.min,
@@ -383,6 +423,19 @@ class _FlightSettingsState extends State<FlightSettings> {
                         privacy,
                       ],
                     ),
+                    if (publicLinks.isNotEmpty)
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text('Help & privacy', style: bookTitle(24)),
+                          const SizedBox(height: 20),
+                          for (final link in publicLinks) ...[
+                            link,
+                            const SizedBox(height: 12),
+                          ],
+                        ],
+                      ),
                   ],
         };
         final page = _page.clamp(0, pages.length - 1);

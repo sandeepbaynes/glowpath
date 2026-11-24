@@ -16,6 +16,9 @@ import 'ui/cutout_beacon.dart';
 import 'services/flight_league.dart';
 import 'services/flight_support.dart';
 import 'services/ad_pacing.dart';
+import 'services/native_ads.dart';
+import 'services/public_links.dart';
+import 'ui/native_banner_slot.dart';
 import 'services/game_analytics.dart';
 import 'services/fold_posture.dart';
 import 'ui/flight_league_panel.dart';
@@ -63,6 +66,7 @@ class GlowpathApp extends StatelessWidget {
     this.clockNow,
     this.startOnVoyage = false,
     this.foldGeometry,
+    this.ads,
   });
   final GameController? controller;
   final bool ambientMotion;
@@ -70,6 +74,7 @@ class GlowpathApp extends StatelessWidget {
   final Duration Function()? clockNow;
   final bool startOnVoyage;
   final ValueListenable<FoldGeometry>? foldGeometry;
+  final NativeAds? ads;
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Glowpath',
@@ -92,6 +97,7 @@ class GlowpathApp extends StatelessWidget {
       clockNow: clockNow,
       startOnVoyage: startOnVoyage,
       foldGeometry: foldGeometry,
+      ads: ads,
     ),
   );
 }
@@ -105,6 +111,7 @@ class GameScreen extends StatefulWidget {
     this.clockNow,
     this.startOnVoyage = false,
     this.foldGeometry,
+    this.ads,
   });
   final GameController? controller;
   final bool ambientMotion;
@@ -112,6 +119,7 @@ class GameScreen extends StatefulWidget {
   final Duration Function()? clockNow;
   final bool startOnVoyage;
   final ValueListenable<FoldGeometry>? foldGeometry;
+  final NativeAds? ads;
   @override
   State<GameScreen> createState() => _GameScreenState();
 }
@@ -124,7 +132,10 @@ class _GameScreenState extends State<GameScreen>
   late final AnimationController _arrival;
   AnimationController? _sheetMotion;
   final FlightLeague _league = FlightLeague();
-  final FlightSupport _support = FlightSupport();
+  late final NativeAds _ads = widget.ads ?? NativeAds();
+  late final FlightSupport _support = FlightSupport(adService: _ads);
+  bool _pendingLevelAd = false;
+  Duration _adSampleElapsed = Duration.zero;
   final GameAnalytics _analytics = GameAnalytics();
   final AdPacing _adPacing = AdPacing();
   final _briefingKey = GlobalKey(debugLabel: 'mission-briefing');
@@ -151,7 +162,7 @@ class _GameScreenState extends State<GameScreen>
   int? _lastPressureSecond;
   bool _foreground = true;
   int _panelDepth = 0;
-  bool get _panelOpen => _panelDepth > 0;
+  bool get _panelOpen => _panelDepth > 0 || _ads.presenting;
   bool _flightFailed = false;
   void _track(String name, [Map<String, Object?> fields = const {}]) {
     unawaited(_analytics.record(name, fields).catchError((Object _) {}));
@@ -265,6 +276,19 @@ class _GameScreenState extends State<GameScreen>
     _welcome = widget.showBriefings && !_game.onboardingSeen;
     unawaited(_league.load());
     unawaited(_support.initialize());
+    _ads.onEvent = (name, placement) => _track(name, {'placement': placement});
+    _ads.onRevenue = (placement, micros, currency, precision) =>
+        _track('ad_paid', {
+          'placement': placement,
+          'valueMicros': micros,
+          'currency': currency,
+          'precision': precision,
+        });
+    _ads.addListener(_adsChanged);
+    _support.addListener(_adsChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_ads.prepare());
+    });
     _foreground =
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
@@ -310,6 +334,12 @@ class _GameScreenState extends State<GameScreen>
       _challengeAdvancePending = true;
       _scheduleChallengeAdvance();
     }
+  }
+
+  void _adsChanged() {
+    if (!mounted) return;
+    _syncClock();
+    setState(() {});
   }
 
   void _finishArrival() {
@@ -363,6 +393,7 @@ class _GameScreenState extends State<GameScreen>
         _observedMode != _game.mode ||
         (solved && _clockRound != _roundClockId);
     if (restoring || !solved) {
+      _pendingLevelAd = false;
       _challengeAdvance?.cancel();
       _challengeAdvance = null;
       _challengeAdvancePending = false;
@@ -398,13 +429,13 @@ class _GameScreenState extends State<GameScreen>
         'timeBucket': _clock.elapsed.inSeconds ~/ 15,
       };
       _track('level_complete', fields);
-      _adPacing.recordPlay(_clock.elapsed);
       if (_adPacing.completeLevel(
         now: _monotonic.elapsed,
         engaged: _game.puzzle.levelNumber > 3,
         assisted: _game.assisted,
         challenge: _isChallenge,
       )) {
+        _pendingLevelAd = true;
         _track('ad_eligible', {'placement': 'voyage_result'});
       }
       _submitLeagueResult();
@@ -457,6 +488,7 @@ class _GameScreenState extends State<GameScreen>
         _budget + _game.attemptExtraTime,
         elapsed: _game.attemptElapsed,
       );
+      _adSampleElapsed = _game.attemptElapsed;
       _lastPressureSecond = null;
     } else if (_game.ready) {
       final total = _budget + _game.attemptExtraTime;
@@ -484,7 +516,10 @@ class _GameScreenState extends State<GameScreen>
 
   void _sampleTiming() {
     if (_game.ready && _clockRound == _roundClockId && !_game.status.solved) {
-      _game.updateAttemptTiming(_clock.elapsed, _budget);
+      final elapsed = _clock.elapsed;
+      _adPacing.recordPlay(elapsed - _adSampleElapsed);
+      _adSampleElapsed = elapsed;
+      _game.updateAttemptTiming(elapsed, _budget);
     }
   }
 
@@ -561,7 +596,10 @@ class _GameScreenState extends State<GameScreen>
     _challengeAdvance?.cancel();
     _remaining.dispose();
     _league.dispose();
+    _support.removeListener(_adsChanged);
     _support.dispose();
+    _ads.removeListener(_adsChanged);
+    if (widget.ads == null) _ads.dispose();
     _monotonic.stop();
     if (widget.controller == null) _game.dispose();
     _arrival.dispose();
@@ -645,6 +683,17 @@ class _GameScreenState extends State<GameScreen>
 
   @override
   Widget build(BuildContext context) => Scaffold(
+    bottomNavigationBar:
+        _ads.ready &&
+            !_support.adFree &&
+            !_flightFailed &&
+            !_briefingOpen &&
+            !_foldGeometry.value.supported &&
+            MediaQuery.sizeOf(context).width >= 320 &&
+            MediaQuery.sizeOf(context).height >= 640 &&
+            MediaQuery.textScalerOf(context).scale(1) <= 1.3
+        ? NativeBannerSlot(ads: _ads)
+        : null,
     body: SceneTransition(
       reduceMotion: _reduced,
       child: !_game.ready
@@ -1586,7 +1635,21 @@ class _GameScreenState extends State<GameScreen>
     ),
   );
 
-  void _playNext() {
+  void _playNext() async {
+    if (_ads.presenting) return;
+    if (_pendingLevelAd &&
+        !_support.adFree &&
+        _game.status.solved &&
+        !_isChallenge) {
+      _pendingLevelAd = false;
+      final round = _roundClockId;
+      await _ads.showLevelBreak(
+        onImpression: () {
+          _adPacing.recordImpression(_monotonic.elapsed);
+        },
+      );
+      if (!mounted || round != _roundClockId || !_game.status.solved) return;
+    }
     if (_voyageHome && !_game.status.solved) {
       setState(() {
         _voyageHome = false;
@@ -2711,11 +2774,28 @@ class _GameScreenState extends State<GameScreen>
     );
   }
 
+  Future<void> _openPublicPage(String page) async {
+    var opened = false;
+    try {
+      opened = await openPublicPage(page);
+    } catch (_) {}
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('The page could not open. Please try again.'),
+        ),
+      );
+    }
+  }
+
   void _settings() => _sheet(
     'FLIGHT CONTROLS',
     (sheetContext) => FlightSettings(
       game: _game,
       demo: _league.isMock,
+      onAdPrivacy: _ads.privacyOptionsRequired ? _ads.privacyOptions : null,
+      onPrivacyPolicy: () => _openPublicPage('privacy.html'),
+      onHelpSite: () => _openPublicPage('support.html'),
       onRestart: () {
         Navigator.pop(sheetContext);
         _restartPrompt();
@@ -2738,7 +2818,7 @@ class _GameScreenState extends State<GameScreen>
           onGenerateRoute: (_) => MaterialPageRoute<void>(
             builder: (_) => const LicensePage(
               applicationName: 'Glowpath',
-              applicationVersion: '0.11.3',
+              applicationVersion: '0.12.0',
             ),
           ),
         ),

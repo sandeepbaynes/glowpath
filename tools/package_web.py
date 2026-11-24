@@ -14,6 +14,38 @@ import zipfile
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CLOUDFLARE_MAX_FILES = 1000
 CLOUDFLARE_MAX_ASSET_BYTES = 25 * 1024 * 1024
+ADSENSE_PUBLISHER = "ca-pub-3704137344359613"
+PUBLIC_METADATA_MARKER = "<!-- GLOWPATH_PUBLIC_METADATA -->"
+PUBLIC_LINKS_MARKER = "<!-- GLOWPATH_PUBLIC_LINKS -->"
+
+
+def build_metadata(version, mode, base_href, target):
+    metadata = {
+        "version": version, "mode": mode, "baseHref": base_href, "target": target,
+        "buildFlags": {"MOCK_SERVICES": mode == "review", "ENABLE_ADS": False,
+                       "ENABLE_PURCHASES": False, "LEADERBOARD_URL": ""},
+    }
+    if mode == "public":
+        metadata["webAds"] = {
+            "publisherId": ADSENSE_PUBLISHER, "publisherConfigured": True,
+            "servingStatus": "pending_approval_and_integration", "liveAds": False,
+        }
+    return metadata
+
+
+def prepare_public_site(destination):
+    """Verify publisher ownership without loading or requesting advertising."""
+    index = destination / "index.html"
+    html = index.read_text()
+    check(PUBLIC_METADATA_MARKER in html and PUBLIC_LINKS_MARKER in html,
+          "Missing public website injection markers")
+    html = html.replace(PUBLIC_METADATA_MARKER,
+                        f'<meta name="google-adsense-account" content="{ADSENSE_PUBLISHER}">')
+    html = html.replace(PUBLIC_LINKS_MARKER,
+                        '<nav class="launch-links" aria-label="Website information">'
+                        '<a href="privacy.html">Privacy</a>'
+                        '<a href="support.html">Help &amp; support</a></nav>')
+    index.write_text(html)
 
 
 def sha256(data):
@@ -55,7 +87,7 @@ def validate_bundle(files, version, mode, base_href, target):
     """Validate actual packaged bytes, including root/subpath and local fonts."""
     check(re.fullmatch(r"/(?:[A-Za-z0-9_-]+/)*", base_href), "Invalid base href")
     check(target in ("static", "cloudflare"), "Unknown deployment target")
-    check(mode in ("review", "preview"), "Unknown service mode")
+    check(mode in ("review", "preview", "public"), "Unknown service mode")
     for name in files:
         path = pathlib.PurePosixPath(name)
         check(not path.is_absolute() and ".." not in path.parts,
@@ -88,11 +120,20 @@ def validate_bundle(files, version, mode, base_href, target):
     check(f"{actual_version['version']}+{actual_version['build_number']}" == version,
           "Compiled version does not match package version")
     metadata = json.loads(files["glowpath-build.json"])
-    expected_flags = {"MOCK_SERVICES": mode == "review", "ENABLE_ADS": False,
-                      "ENABLE_PURCHASES": False, "LEADERBOARD_URL": ""}
-    check(metadata == {"version": version, "mode": mode, "baseHref": base_href,
-                       "target": target, "buildFlags": expected_flags},
+    check(metadata == build_metadata(version, mode, base_href, target),
           "Packaged build metadata does not match release configuration")
+    publisher_tags = re.findall(
+        r'<meta\s+name="google-adsense-account"\s+content="([^"]+)"', index)
+    if mode == "public":
+        check(publisher_tags == [ADSENSE_PUBLISHER], "Missing or incorrect publisher verification")
+        for page in ("privacy.html", "support.html", "site.css"):
+            check(page in files, f"Missing public website page: {page}")
+        check('href="privacy.html"' in index and 'href="support.html"' in index,
+              "Missing public website information links")
+        check(not re.search(r'<meta\b[^>]*name=[\"\']robots[\"\'][^>]*noindex', index, re.I),
+              "Public site must not contain a noindex meta tag")
+    else:
+        check(not publisher_tags, "Preview must not configure a live publisher")
     for font in json.loads(files["assets/FontManifest.json"]):
         for asset in font["fonts"]:
             check(f"assets/{asset['asset']}" in files, f"Missing font: {asset['asset']}")
@@ -107,8 +148,11 @@ def validate_bundle(files, version, mode, base_href, target):
               "Cloudflare 25 MiB asset limit exceeded")
         check(b"Cache-Control: no-cache" in files.get("_headers", b""),
               "Missing Cloudflare revalidation headers")
-        check(b"X-Robots-Tag: noindex" in files.get("_headers", b""),
-              "Preview should not be indexed")
+        if mode == "public":
+            check(b"noindex" not in files["_headers"].lower(), "Public site must permit indexing")
+        else:
+            check(b"X-Robots-Tag: noindex" in files.get("_headers", b""),
+                  "Preview should not be indexed")
 
 
 def verify_archive(archive, manifest_path=None):
@@ -133,20 +177,23 @@ def package(root, flutter, version, base_href, mode, target):
     output.mkdir(parents=True, exist_ok=True)
     destination = output / name
     archive = output / f"{name}.zip"
-    flags = {"MOCK_SERVICES": mode == "review", "ENABLE_ADS": False,
-             "ENABLE_PURCHASES": False, "LEADERBOARD_URL": ""}
-    metadata = {"version": version, "mode": mode, "baseHref": base_href,
-                "target": target, "buildFlags": flags}
+    metadata = build_metadata(version, mode, base_href, target)
     # Flutter retains unknown hashed files in reused output directories. Build
     # from an empty staging area so every ZIP contains exactly one generation.
     with tempfile.TemporaryDirectory(prefix=".web-package-", dir=output) as staging:
         staging = pathlib.Path(staging)
         subprocess.run(build_command(flutter, staging, base_href, mode), cwd=root, check=True)
+        if mode == "public":
+            prepare_public_site(staging)
         fingerprint_scripts(staging)
         (staging / ".nojekyll").touch()
         (staging / "glowpath-build.json").write_text(json.dumps(metadata, indent=2) + "\n")
         if target == "cloudflare":
-            shutil.copyfile(root / "docs/release/cloudflare/_headers", staging / "_headers")
+            headers = (root / "docs/release/cloudflare/_headers").read_text()
+            if mode == "public":
+                headers = "\n".join(line for line in headers.splitlines()
+                                    if "noindex" not in line.lower() and not line.startswith("#")) + "\n"
+            (staging / "_headers").write_text(headers)
         files = {str(path.relative_to(staging)): path.read_bytes()
                  for path in sorted(staging.rglob("*")) if path.is_file()}
         validate_bundle(files, version, mode, base_href, target)
@@ -178,8 +225,8 @@ def package(root, flutter, version, base_href, mode, target):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-href", default="/", help="/ or /repository-name/")
-    parser.add_argument("--mode", choices=("review", "preview"), default="review",
-                        help="review: labelled local mocks; preview: free, no live services")
+    parser.add_argument("--mode", choices=("review", "preview", "public"), default="review",
+                        help="review: local mocks; preview: no live services; public: publisher verification, ads pending")
     parser.add_argument("--target", choices=("static", "cloudflare"), default="static")
     parser.add_argument("--verify-archive", type=pathlib.Path,
                         help="Verify a ZIP and its sibling JSON without Flutter or account access")

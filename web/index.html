@@ -20,6 +20,7 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Chart a route through distant worlds. Connect three stars before launch.">
   <meta name="theme-color" content="#060B14">
+  <!-- GLOWPATH_PUBLIC_METADATA -->
   <style>
     @font-face {
       font-family: Manrope;
@@ -40,6 +41,8 @@
     .launch-mark { width: 128px; height: 128px; display: block; margin: 0 auto 24px; }
     .launch-name { margin: 0; font-size: 38px; line-height: 1.15; font-weight: 500; letter-spacing: -.5px; }
     .launch-status { margin: 16px 0 0; font-size: 16px; color: #a9b8c6; }
+    .launch-links { position: absolute; bottom: max(20px, env(safe-area-inset-bottom)); display: flex; gap: 24px; font-size: 14px; }
+    .launch-links a { color: #a9b8c6; text-underline-offset: 4px; padding: 10px 0; }
     @media (max-height: 420px) { .launch-mark { width: 88px; height: 88px; } }
     @media (prefers-reduced-motion: reduce) { #launch-splash { transition: none; } }
   </style>
@@ -85,6 +88,7 @@
       <p class="launch-name">Glowpath</p>
       <p class="launch-status">Loading your route</p>
     </div>
+    <!-- GLOWPATH_PUBLIC_LINKS -->
   </div>
   <script>
     // Flutter dispatches this after the first rendered frame. No artificial

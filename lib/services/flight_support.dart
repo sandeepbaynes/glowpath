@@ -7,6 +7,8 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_storekit/store_kit_2_wrappers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'native_ads.dart';
+
 /// All shipped clients remain free. Payments are paused by product policy;
 /// build flags cannot enable them. The explicit constructor override preserves
 /// isolated adapter tests. MOCK_SERVICES rewards use separate local demo data.
@@ -17,12 +19,14 @@ class FlightSupport extends ChangeNotifier {
     bool? mock,
     SharedPreferences? preferences,
     Future<bool> Function()? entitlementReader,
+    NativeAds? adService,
   }) : this._(
          ads ?? adsEnabled,
          purchases ?? purchasesEnabled,
          mock ?? mockServices,
          preferences,
          entitlementReader,
+         adService,
        );
 
   FlightSupport._(
@@ -31,7 +35,13 @@ class FlightSupport extends ChangeNotifier {
     this.isMock,
     this._preferences,
     this._entitlementReader,
-  );
+    NativeAds? adService,
+  ) : _ads =
+          adService ?? NativeAds(config: NativeAdConfig(enabled: _adsEnabled)),
+      _ownsAds = adService == null;
+
+  final NativeAds _ads;
+  final bool _ownsAds;
 
   final bool _adsEnabled, _purchasesEnabled;
   final bool isMock;
@@ -50,22 +60,6 @@ class FlightSupport extends ChangeNotifier {
   static const adsEnabled = bool.fromEnvironment('ENABLE_ADS');
   static const purchasesEnabled = false;
   static const productId = 'app.glowpath.remove_ads';
-  static const _iosHintReward = String.fromEnvironment(
-    'IOS_HINT_REWARDED_AD',
-    defaultValue: 'ca-app-pub-3940256099942544/1712485313',
-  );
-  static const _iosSkipReward = String.fromEnvironment(
-    'IOS_SKIP_REWARDED_AD',
-    defaultValue: 'ca-app-pub-3940256099942544/1712485313',
-  );
-  static const _androidHintReward = String.fromEnvironment(
-    'ANDROID_HINT_REWARDED_AD',
-    defaultValue: 'ca-app-pub-3940256099942544/5224354917',
-  );
-  static const _androidSkipReward = String.fromEnvironment(
-    'ANDROID_SKIP_REWARDED_AD',
-    defaultValue: 'ca-app-pub-3940256099942544/5224354917',
-  );
   bool _disposed = false, busy = false, adFree = false;
   String? message;
   ProductDetails? product;
@@ -332,30 +326,6 @@ class FlightSupport extends ChangeNotifier {
     return true;
   }
 
-  Future<bool> _consent() async {
-    final done = Completer<bool>();
-    ConsentInformation.instance.requestConsentInfoUpdate(
-      ConsentRequestParameters(),
-      () async {
-        await ConsentForm.loadAndShowConsentFormIfRequired((error) async {
-          if (!done.isCompleted) {
-            done.complete(
-              error == null &&
-                  await ConsentInformation.instance.canRequestAds(),
-            );
-          }
-        });
-      },
-      (_) {
-        if (!done.isCompleted) done.complete(false);
-      },
-    );
-    return done.future.timeout(
-      const Duration(seconds: 15),
-      onTimeout: () => false,
-    );
-  }
-
   Future<bool> earnReward({required bool skip}) async {
     if (isMock) {
       await (_creditLoading ??= _loadCredits());
@@ -383,25 +353,23 @@ class FlightSupport extends ChangeNotifier {
     message = null;
     _notify();
     try {
-      if (!await _consent()) {
+      if (!await _ads.prepare()) {
         message = 'An ad is not available. Your route stays saved.';
         return false;
       }
-      await MobileAds.instance.updateRequestConfiguration(
-        RequestConfiguration(maxAdContentRating: MaxAdContentRating.g),
-      );
-      await MobileAds.instance.initialize();
+      final consentEpoch = _ads.consentEpoch;
+      final placement = skip ? 'skip' : 'hint';
+      _ads.onEvent?.call('ad_request', placement);
       final loaded = Completer<RewardedAd?>();
       bool timedOut = false;
       await RewardedAd.load(
-        adUnitId: defaultTargetPlatform == TargetPlatform.iOS
-            ? (skip ? _iosSkipReward : _iosHintReward)
-            : (skip ? _androidSkipReward : _androidHintReward),
+        adUnitId: _ads.unit(skip ? 'skip' : 'hint'),
         request: const AdRequest(nonPersonalizedAds: true),
         rewardedAdLoadCallback: RewardedAdLoadCallback(
           onAdLoaded: (ad) {
-            if (timedOut) {
+            if (timedOut || !_ads.hasCurrentConsent(consentEpoch)) {
               ad.dispose();
+              if (!loaded.isCompleted) loaded.complete(null);
             } else if (!loaded.isCompleted) {
               loaded.complete(ad);
             }
@@ -418,18 +386,26 @@ class FlightSupport extends ChangeNotifier {
           return null;
         },
       );
-      if (ad == null) {
+      if (ad == null || !_ads.hasCurrentConsent(consentEpoch)) {
+        ad?.dispose();
+        _ads.onEvent?.call('ad_no_fill', placement);
         message = 'No ad available right now. Try again later.';
         return false;
       }
+      ad.onPaidEvent = (_, micros, precision, currency) =>
+          _ads.recordRevenue(placement, micros, precision, currency);
       bool earned = false;
       final dismissed = Completer<bool>();
       ad.fullScreenContentCallback = FullScreenContentCallback(
+        onAdShowedFullScreenContent: (_) =>
+            _ads.onEvent?.call('ad_impression', placement),
         onAdDismissedFullScreenContent: (ad) {
+          _ads.onEvent?.call('ad_closed', placement);
           ad.dispose();
           if (!dismissed.isCompleted) dismissed.complete(earned);
         },
         onAdFailedToShowFullScreenContent: (ad, error) {
+          _ads.onEvent?.call('ad_no_fill', placement);
           ad.dispose();
           if (!dismissed.isCompleted) dismissed.complete(false);
         },
@@ -438,6 +414,7 @@ class FlightSupport extends ChangeNotifier {
         onUserEarnedReward: (_, reward) {
           if (!earned) {
             earned = true;
+            _ads.onEvent?.call('ad_reward', placement);
             if (skip) {
               _skipCredits++;
             } else {
@@ -470,13 +447,14 @@ class FlightSupport extends ChangeNotifier {
       return;
     }
     if (!native || !_adsEnabled) return;
-    await ConsentForm.showPrivacyOptionsForm((_) {});
+    await _ads.privacyOptions();
   }
 
   @override
   void dispose() {
     _disposed = true;
     _purchaseSubscription?.cancel();
+    if (_ownsAds) _ads.dispose();
     super.dispose();
   }
 }
