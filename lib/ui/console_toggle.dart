@@ -43,6 +43,7 @@ class _ConsoleToggleState extends State<ConsoleToggle> {
         MediaQuery.disableAnimationsOf(context) ||
         MediaQuery.reduceMotionOf(context);
     final large = MediaQuery.textScalerOf(context).scale(1) > 1.7;
+    final shortPane = widget.compact && MediaQuery.sizeOf(context).height < 450;
     final rail = SizedBox(
       width: 54,
       height: 26,
@@ -110,7 +111,10 @@ class _ConsoleToggleState extends State<ConsoleToggle> {
                   : const Duration(milliseconds: 160),
               curve: Curves.easeOutCubic,
               constraints: const BoxConstraints(minHeight: 72, minWidth: 48),
-              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+              padding: EdgeInsets.symmetric(
+                vertical: shortPane ? 6 : 14,
+                horizontal: 4,
+              ),
               decoration: BoxDecoration(
                 color: _pressed
                     ? Palette.rust.withValues(alpha: .035)

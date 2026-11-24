@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:material_ui/material_ui.dart';
 
 import '../game/puzzle.dart';
 import 'design.dart';
+import 'fold_layout.dart';
 import 'space_controls.dart';
 import 'observatory_art.dart';
 import 'puzzle_board.dart';
@@ -38,7 +41,7 @@ const firstFlightBriefing = <MissionBriefingBeat>[
   ),
 ];
 
-class MissionBriefing extends StatelessWidget {
+class MissionBriefing extends StatefulWidget {
   const MissionBriefing({
     super.key,
     required this.onStart,
@@ -47,100 +50,372 @@ class MissionBriefing extends StatelessWidget {
     this.beats = firstFlightBriefing,
     this.actionLabel = "Let's fly",
     this.reduceMotion = false,
+    this.panes,
   });
   final VoidCallback onStart;
   final String destination, actionLabel;
   final int planet;
   final List<MissionBriefingBeat> beats;
   final bool reduceMotion;
+  final FoldPaneLayout? panes;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final scale = MediaQuery.textScalerOf(context).scale(1);
-      final dense = scale > 1.5 || constraints.maxHeight < 500;
-      final sideBySide =
-          scale > 1.5 &&
-          constraints.maxWidth >= 460 &&
-          constraints.maxHeight < 420;
-      final illustrated = scale <= 1.2 && constraints.maxHeight >= 500;
-      final header = Semantics(
-        header: true,
-        label: 'Mission briefing. $destination. Planet $planet.',
-        child: ExcludeSemantics(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (!dense) ...[
-                Row(
+  State<MissionBriefing> createState() => _MissionBriefingState();
+
+  Widget _build(
+    BuildContext context,
+    int cursor,
+    ValueChanged<int> onCursorChanged,
+  ) => panes != null
+      ? _foldPresentation(context, panes!, cursor, onCursorChanged)
+      : LayoutBuilder(
+          builder: (context, constraints) {
+            final scale = MediaQuery.textScalerOf(context).scale(1);
+            final dense = scale > 1.5 || constraints.maxHeight < 500;
+            final sideBySide =
+                scale > 1.5 &&
+                constraints.maxWidth >= 460 &&
+                constraints.maxHeight < 420;
+            final illustrated = scale <= 1.2 && constraints.maxHeight >= 500;
+            final header = Semantics(
+              header: true,
+              label: 'Mission briefing. $destination. Planet $planet.',
+              child: ExcludeSemantics(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(width: 18, height: 1, color: Palette.rust),
-                    const SizedBox(width: 8),
-                    Text(
-                      'FLIGHT NOTES / ${planet.toString().padLeft(2, '0')}',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        letterSpacing: 1.7,
-                        color: Palette.rust,
+                    if (!dense) ...[
+                      Row(
+                        children: [
+                          Container(width: 18, height: 1, color: Palette.rust),
+                          const SizedBox(width: 8),
+                          Text(
+                            'FLIGHT NOTES / ${planet.toString().padLeft(2, '0')}',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              letterSpacing: 1.7,
+                              color: Palette.rust,
+                            ),
+                          ),
+                        ],
                       ),
+                      const SizedBox(height: 10),
+                    ],
+                    Text(
+                      dense ? 'Flight notes' : destination,
+                      maxLines: 2,
+                      style: bookTitle(dense ? 16 : 30),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+              ),
+            );
+            final start = SpaceAction(
+              key: const ValueKey('briefing-start'),
+              label: actionLabel,
+              onPressed: onStart,
+              reduceMotion: reduceMotion,
+              compact: dense,
+            );
+            // At accessibility sizes the unbroken list can exceed even a tall
+            // flat card. Reuse the measured pages and the same reading cursor
+            // so unfolding never clips an instruction or moves the action out
+            // of reach.
+            if (scale > 2) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  header,
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: _FoldBriefingNotes(
+                      text: beats.map((beat) => beat.text).join('\n\n'),
+                      actionLabel: actionLabel,
+                      onStart: onStart,
+                      reduceMotion: reduceMotion,
+                      cursor: cursor,
+                      onCursorChanged: onCursorChanged,
+                    ),
+                  ),
+                ],
+              );
+            }
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (sideBySide)
+                  Row(
+                    children: [
+                      Expanded(child: header),
+                      const SizedBox(width: 16),
+                      Expanded(child: start),
+                    ],
+                  )
+                else
+                  header,
+                if (illustrated) ...[
+                  SizedBox(
+                    height: 100,
+                    child: beats.first.routeKind != null
+                        ? Center(
+                            child: RouteMechanicGlyph(
+                              kind: beats.first.routeKind!,
+                              color: Palette.rust,
+                              size: 64,
+                            ),
+                          )
+                        : MissionIllustration(
+                            kind: illustrationFor(beats.first.icon),
+                          ),
+                  ),
+                  const SizedBox(height: 6),
+                ] else
+                  SizedBox(height: dense ? 12 : 22),
+                for (var index = 0; index < beats.length; index++) ...[
+                  _FlightNote(
+                    beat: beats[index],
+                    dense: dense,
+                    number: index + 1,
+                  ),
+                  if (index + 1 < beats.length)
+                    SizedBox(height: dense ? 8 : 14),
+                ],
+                if (!sideBySide) ...[SizedBox(height: dense ? 14 : 24), start],
               ],
-              Text(
-                dense ? 'Flight notes' : destination,
-                maxLines: 2,
-                style: bookTitle(dense ? 16 : 30),
+            );
+          },
+        );
+
+  Widget _foldPresentation(
+    BuildContext context,
+    FoldPaneLayout panes,
+    int cursor,
+    ValueChanged<int> onCursorChanged,
+  ) {
+    final media = MediaQuery.of(context);
+    Widget pane(Rect rect, String key, Widget child) => Positioned.fromRect(
+      rect: rect,
+      child: ClipRect(
+        key: ValueKey(key),
+        child: MediaQuery(
+          data: FoldPaneLayout.paneMediaQuery(media, rect),
+          child: Padding(padding: const EdgeInsets.all(20), child: child),
+        ),
+      ),
+    );
+    final first = beats.isEmpty ? firstFlightBriefing.first : beats.first;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        pane(
+          panes.missionRect,
+          'briefing-mission-pane',
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Semantics(
+                header: true,
+                label: 'Mission briefing. $destination. Planet $planet.',
+                child: Text(
+                  destination,
+                  style: bookTitle(media.textScaler.scale(1) > 1.5 ? 20 : 30),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ExcludeSemantics(
+                  child: first.routeKind != null
+                      ? Center(
+                          child: RouteMechanicGlyph(
+                            kind: first.routeKind!,
+                            color: Palette.rust,
+                            size: 96,
+                          ),
+                        )
+                      : MissionIllustration(kind: illustrationFor(first.icon)),
+                ),
               ),
             ],
           ),
         ),
+        pane(
+          panes.actionRect,
+          'briefing-action-pane',
+          _FoldBriefingNotes(
+            text: beats.map((beat) => beat.text).join('\n\n'),
+            actionLabel: actionLabel,
+            onStart: onStart,
+            reduceMotion: reduceMotion,
+            cursor: cursor,
+            onCursorChanged: onCursorChanged,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MissionBriefingState extends State<MissionBriefing> {
+  int _cursor = 0;
+
+  @override
+  void didUpdateWidget(MissionBriefing oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.beats.map((beat) => beat.text).join('\n') !=
+        widget.beats.map((beat) => beat.text).join('\n')) {
+      _cursor = 0;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget._build(
+    context,
+    _cursor,
+    (cursor) => setState(() => _cursor = cursor),
+  );
+}
+
+/// Reflow long instructions within the action pane while keeping the final
+/// action fixed and preserving the reader's place when the hinge moves.
+class _FoldBriefingNotes extends StatelessWidget {
+  const _FoldBriefingNotes({
+    required this.text,
+    required this.actionLabel,
+    required this.onStart,
+    required this.reduceMotion,
+    required this.cursor,
+    required this.onCursorChanged,
+  });
+  final String text, actionLabel;
+  final VoidCallback onStart;
+  final bool reduceMotion;
+  final int cursor;
+  final ValueChanged<int> onCursorChanged;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, bounds) {
+      final scaler = MediaQuery.textScalerOf(context);
+      final style = DefaultTextStyle.of(context).style.merge(
+        const TextStyle(fontSize: 15, height: 1.4, color: Palette.white),
       );
+      final actionHeight = math.max(54.0, scaler.scale(14) * 1.6 + 20);
+      final textHeight = math.max(1.0, bounds.maxHeight - actionHeight - 16);
+      final measure = TextPainter(
+        textScaler: scaler,
+        textDirection: Directionality.of(context),
+      );
+      bool fits(String text) {
+        measure.text = TextSpan(text: text, style: style);
+        measure.layout(maxWidth: bounds.maxWidth);
+        return measure.height <= textHeight;
+      }
+
+      final pages = <({String text, int start, int end})>[];
+      var remaining = text.trim();
+      var offset = 0;
+      while (remaining.isNotEmpty) {
+        var low = 1, high = remaining.length;
+        while (low < high) {
+          final middle = (low + high + 1) ~/ 2;
+          if (fits(remaining.substring(0, middle))) {
+            low = middle;
+          } else {
+            high = middle - 1;
+          }
+        }
+        var end = low;
+        if (end < remaining.length) {
+          final space = remaining.lastIndexOf(RegExp(r'\s'), end);
+          if (space > 0) end = space;
+        }
+        final text = remaining.substring(0, end).trim();
+        final next = offset + text.replaceAll(RegExp(r'\s'), '').length;
+        pages.add((text: text, start: offset, end: next));
+        offset = next;
+        remaining = remaining.substring(end).trimLeft();
+      }
+      measure.dispose();
+      if (pages.isEmpty) {
+        pages.add((text: 'Ready for flight.', start: 0, end: 1));
+      }
+      final match = pages.indexWhere((page) => cursor < page.end);
+      final page = match < 0 ? pages.length - 1 : match;
+      final last = page == pages.length - 1;
       final start = SpaceAction(
         key: const ValueKey('briefing-start'),
-        label: actionLabel,
-        onPressed: onStart,
+        label: last ? actionLabel : 'Next',
+        onPressed: last
+            ? onStart
+            : () => onCursorChanged(pages[page + 1].start),
         reduceMotion: reduceMotion,
-        compact: dense,
+        compact: true,
       );
       return Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (sideBySide)
-            Row(
-              children: [
-                Expanded(child: header),
-                const SizedBox(width: 16),
-                Expanded(child: start),
-              ],
-            )
-          else
-            header,
-          if (illustrated) ...[
-            SizedBox(
-              height: 100,
-              child: beats.first.routeKind != null
-                  ? Center(
-                      child: RouteMechanicGlyph(
-                        kind: beats.first.routeKind!,
-                        color: Palette.rust,
-                        size: 64,
-                      ),
-                    )
-                  : MissionIllustration(
-                      kind: illustrationFor(beats.first.icon),
-                    ),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  pages[page].text,
+                  key: const ValueKey('briefing-copy'),
+                  style: style,
+                ),
+              ),
             ),
-            const SizedBox(height: 6),
-          ] else
-            SizedBox(height: dense ? 12 : 22),
-          for (var index = 0; index < beats.length; index++) ...[
-            _FlightNote(beat: beats[index], dense: dense, number: index + 1),
-            if (index + 1 < beats.length) SizedBox(height: dense ? 8 : 14),
-          ],
-          if (!sideBySide) ...[SizedBox(height: dense ? 14 : 24), start],
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: actionHeight,
+            child: pages.length == 1
+                ? start
+                : Row(
+                    children: [
+                      IgnorePointer(
+                        ignoring: page == 0,
+                        child: ExcludeFocus(
+                          excluding: page == 0,
+                          child: ExcludeSemantics(
+                            excluding: page == 0,
+                            child: Opacity(
+                              opacity: page == 0 ? .25 : 1,
+                              child: OrbitUtility(
+                                key: const ValueKey('briefing-previous'),
+                                label: 'Previous instruction',
+                                icon: Icons.arrow_back_rounded,
+                                width: 48,
+                                reduceMotion: reduceMotion,
+                                onPressed: () =>
+                                    onCursorChanged(pages[page - 1].start),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 48,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '${page + 1}/${pages.length}',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Palette.secondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(child: start),
+                    ],
+                  ),
+          ),
         ],
       );
     },

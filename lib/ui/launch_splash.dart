@@ -3,11 +3,13 @@ import 'dart:math' as math;
 import 'package:material_ui/material_ui.dart';
 
 import 'design.dart';
+import 'fold_layout.dart';
 
 /// The loading state, not a timed gate. The app removes it as soon as the
 /// player's local route is ready. Static artwork also respects reduced motion.
 class LaunchSplash extends StatelessWidget {
-  const LaunchSplash({super.key});
+  const LaunchSplash({super.key, this.panes});
+  final FoldPaneLayout? panes;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -24,59 +26,133 @@ class LaunchSplash extends StatelessWidget {
               colors: [Color(0xFF101E29), Palette.paper],
             ),
           ),
-          child: SafeArea(
-            child: LayoutBuilder(
-              builder: (context, bounds) => SingleChildScrollView(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: bounds.maxHeight),
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(28),
+          child: panes != null
+              ? _foldPresentation(context, panes!)
+              : SafeArea(
+                  child: LayoutBuilder(
+                    builder: (context, bounds) => SingleChildScrollView(
                       child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 360),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox.square(
-                              dimension: bounds.maxHeight < 420 ? 88 : 128,
-                              child: const CustomPaint(painter: _LaunchMark()),
-                            ),
-                            const SizedBox(height: 24),
-                            // The wordmark is artwork. The loading status below
-                            // follows the player's full preferred text size.
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Text(
-                                'Glowpath',
-                                style: bookTitle(38).copyWith(
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: -.6,
-                                ),
+                        constraints: BoxConstraints(
+                          minHeight: bounds.maxHeight,
+                        ),
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(28),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 360),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox.square(
+                                    dimension: bounds.maxHeight < 420
+                                        ? 88
+                                        : 128,
+                                    child: const CustomPaint(
+                                      painter: _LaunchMark(),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  // The wordmark is artwork. The loading status below
+                                  // follows the player's full preferred text size.
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      'Glowpath',
+                                      style: bookTitle(38).copyWith(
+                                        fontWeight: FontWeight.w500,
+                                        letterSpacing: -.6,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Text(
+                                    'Loading your route',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      letterSpacing: .4,
+                                      color: Palette.secondary,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'Loading your route',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 14,
-                                letterSpacing: .4,
-                                color: Palette.secondary,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ),
-          ),
         ),
       ),
     ),
   );
+
+  Widget _foldPresentation(BuildContext context, FoldPaneLayout panes) {
+    final media = MediaQuery.of(context);
+    Widget pane(Rect rect, String key, Widget content) => Positioned.fromRect(
+      rect: rect,
+      child: ClipRect(
+        key: ValueKey(key),
+        child: MediaQuery(
+          data: FoldPaneLayout.paneMediaQuery(media, rect),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(child: content),
+          ),
+        ),
+      ),
+    );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        pane(
+          panes.missionRect,
+          'launch-mission-pane',
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: SizedBox(
+              width: 360,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox.square(
+                    dimension: 128,
+                    child: CustomPaint(painter: _LaunchMark()),
+                  ),
+                  const SizedBox(height: 24),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'Glowpath',
+                      style: bookTitle(38).copyWith(
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -.6,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        pane(
+          panes.actionRect,
+          'launch-action-pane',
+          const Text(
+            'Loading your route',
+            key: ValueKey('launch-status'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              letterSpacing: .4,
+              color: Palette.secondary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _LaunchMark extends CustomPainter {

@@ -1,8 +1,12 @@
 import 'dart:math' as math;
+import 'dart:ui' show DisplayFeatureType;
 
+import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../services/fold_posture.dart';
 import 'design.dart';
+import 'fold_layout.dart';
 
 /// Shared geometry for the live route and visual review fixtures.
 class OrbitPanelLayout {
@@ -28,7 +32,7 @@ class OrbitPanelLayout {
 }
 
 /// Full viewport presentation used by centered dialogs and review captures.
-class OrbitPanelFrame extends StatelessWidget {
+class OrbitPanelFrame extends StatefulWidget {
   const OrbitPanelFrame({
     super.key,
     required this.title,
@@ -36,6 +40,10 @@ class OrbitPanelFrame extends StatelessWidget {
     required this.onClose,
     this.fit = false,
     this.preferredDesktopHeight,
+    this.foldGeometry,
+    this.foldCompanionBuilder,
+    this.legacyPhoneBottomSheet = false,
+    this.transitionController,
   });
   final String title;
   final Widget child;
@@ -45,26 +53,135 @@ class OrbitPanelFrame extends StatelessWidget {
   /// A tighter presentation for short panels; touch and larger type keep room.
   final double? preferredDesktopHeight;
 
+  final ValueListenable<FoldGeometry>? foldGeometry;
+  final WidgetBuilder? foldCompanionBuilder;
+
+  /// Full-viewport routes retain the familiar bottom-sheet interaction on a
+  /// phone while remaining able to move into a pane after the route is open.
+  final bool legacyPhoneBottomSheet;
+  final AnimationController? transitionController;
+
+  @override
+  State<OrbitPanelFrame> createState() => _OrbitPanelFrameState();
+}
+
+class _OrbitPanelFrameState extends State<OrbitPanelFrame> {
+  final _contentKey = GlobalKey();
+
   @override
   Widget build(BuildContext context) {
-    final layout = OrbitPanelLayout.fromSize(
-      MediaQuery.sizeOf(context),
-      preferredDesktopHeight: _desktopHeight(context, preferredDesktopHeight),
+    final geometry = widget.foldGeometry;
+    if (geometry == null) return _frame(context, const FoldGeometry());
+    return ValueListenableBuilder<FoldGeometry>(
+      valueListenable: geometry,
+      builder: (context, value, _) => _frame(context, value),
     );
+  }
+
+  Widget _frame(BuildContext context, FoldGeometry geometry) {
+    final media = MediaQuery.of(context);
+    final panes = FoldPaneLayout.resolve(media, geometry);
+    final content = KeyedSubtree(key: _contentKey, child: widget.child);
+    if (panes != null) {
+      final reduced =
+          media.disableAnimations ||
+          media.reduceMotion ||
+          widget.transitionController?.duration == Duration.zero;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          if (widget.foldCompanionBuilder != null)
+            Positioned.fromRect(
+              rect: panes.missionRect,
+              child: ClipRect(
+                key: const ValueKey('fold-panel-companion'),
+                child: MediaQuery(
+                  data: FoldPaneLayout.paneMediaQuery(media, panes.missionRect),
+                  child: Builder(builder: widget.foldCompanionBuilder!),
+                ),
+              ),
+            ),
+          Positioned.fromRect(
+            rect: panes.gap,
+            child: const IgnorePointer(
+              child: SizedBox(key: ValueKey('fold-panel-gap')),
+            ),
+          ),
+          Positioned.fromRect(
+            rect: panes.actionRect,
+            child: ClipRect(
+              key: const ValueKey('fold-panel-action'),
+              child: MediaQuery(
+                data: FoldPaneLayout.paneMediaQuery(media, panes.actionRect),
+                child: TweenAnimationBuilder<double>(
+                  key: ValueKey(panes.axis),
+                  tween: Tween(begin: 0, end: 1),
+                  duration: reduced
+                      ? Duration.zero
+                      : const Duration(milliseconds: 260),
+                  curve: Curves.easeOutCubic,
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: math.min(600, panes.actionRect.width),
+                        maxHeight: math.min(820, panes.actionRect.height),
+                      ),
+                      child: OrbitSheet(
+                        title: widget.title,
+                        fit: widget.fit,
+                        floating: true,
+                        onClose: widget.onClose,
+                        child: content,
+                      ),
+                    ),
+                  ),
+                  builder: (context, value, child) => Opacity(
+                    opacity: value,
+                    child: Transform.translate(
+                      offset: panes.horizontal
+                          ? Offset(0, 10 * (1 - value))
+                          : Offset(10 * (1 - value), 0),
+                      child: child,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+    final layout = OrbitPanelLayout.fromSize(
+      media.size,
+      preferredDesktopHeight: _desktopHeight(
+        context,
+        widget.preferredDesktopHeight,
+      ),
+    );
+    Widget sheet = OrbitSheet(
+      title: widget.title,
+      fit: widget.fit,
+      floating: layout.floating,
+      onClose: widget.onClose,
+      child: content,
+    );
+    if (!layout.floating && widget.legacyPhoneBottomSheet) {
+      final surface = sheet;
+      sheet = BottomSheet(
+        onClosing: widget.onClose,
+        animationController: widget.transitionController,
+        enableDrag: widget.transitionController != null,
+        backgroundColor: Colors.transparent,
+        showDragHandle: false,
+        builder: (_) => surface,
+      );
+    }
     return SafeArea(
       top: layout.floating,
       child: Align(
         alignment: layout.alignment,
-        child: ConstrainedBox(
-          constraints: layout.constraints,
-          child: OrbitSheet(
-            title: title,
-            fit: fit,
-            floating: layout.floating,
-            onClose: onClose,
-            child: child,
-          ),
-        ),
+        child: ConstrainedBox(constraints: layout.constraints, child: sheet),
       ),
     );
   }
@@ -79,12 +196,21 @@ Future<void> showOrbitPanel({
   required AnimationController motion,
   bool fit = false,
   double? preferredDesktopHeight,
+  ValueListenable<FoldGeometry>? foldGeometry,
+  WidgetBuilder? foldCompanionBuilder,
 }) {
+  final foldAware =
+      foldGeometry != null ||
+      MediaQuery.of(context).displayFeatures.any(
+        (feature) =>
+            feature.type == DisplayFeatureType.fold ||
+            feature.type == DisplayFeatureType.hinge,
+      );
   final layout = OrbitPanelLayout.fromSize(
     MediaQuery.sizeOf(context),
     preferredDesktopHeight: _desktopHeight(context, preferredDesktopHeight),
   );
-  if (!layout.floating) {
+  if (!layout.floating && !foldAware) {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -110,6 +236,7 @@ Future<void> showOrbitPanel({
   return navigator.push<void>(
     _OrbitDialogRoute(
       motion: motion,
+      foldAware: foldAware,
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       pageBuilder: (context, animation, secondaryAnimation) => themes.wrap(
         Material(
@@ -121,8 +248,12 @@ Future<void> showOrbitPanel({
               title: title,
               fit: fit,
               preferredDesktopHeight: preferredDesktopHeight,
+              foldGeometry: foldGeometry,
+              foldCompanionBuilder: foldCompanionBuilder,
+              legacyPhoneBottomSheet: foldAware,
+              transitionController: motion,
               onClose: () => Navigator.pop(context),
-              child: builder(context),
+              child: Builder(builder: builder),
             ),
           ),
         ),
@@ -141,9 +272,43 @@ double? _desktopHeight(BuildContext context, double? preferred) {
   };
 }
 
-class _OrbitDialogRoute extends RawDialogRoute<void> {
+/// A modal route whose content owns both sides of a folding display.
+/// Flutter's default dialog route selects a single display sub-screen before
+/// building its page; fold-aware pages need the original viewport instead.
+class FoldDialogRoute<T> extends RawDialogRoute<T> {
+  FoldDialogRoute({
+    required super.pageBuilder,
+    super.barrierDismissible,
+    super.barrierLabel,
+    super.barrierColor,
+    super.transitionDuration,
+    super.transitionBuilder,
+    super.barrierBuilder,
+    super.settings,
+    super.requestFocus,
+    super.traversalEdgeBehavior,
+    super.directionalTraversalEdgeBehavior,
+    super.fullscreenDialog,
+  }) : _fullViewportPageBuilder = pageBuilder;
+
+  final RoutePageBuilder _fullViewportPageBuilder;
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) => Semantics(
+    scopesRoute: true,
+    explicitChildNodes: true,
+    child: _fullViewportPageBuilder(context, animation, secondaryAnimation),
+  );
+}
+
+class _OrbitDialogRoute extends FoldDialogRoute<void> {
   _OrbitDialogRoute({
     required this.motion,
+    this.foldAware = false,
     required super.pageBuilder,
     required super.barrierLabel,
   }) : super(
@@ -163,16 +328,19 @@ class _OrbitDialogRoute extends RawDialogRoute<void> {
            );
            return FadeTransition(
              opacity: eased,
-             child: ScaleTransition(
-               scale: eased.drive(Tween(begin: .975, end: 1.0)),
-               child: child,
-             ),
+             child: foldAware
+                 ? child
+                 : ScaleTransition(
+                     scale: eased.drive(Tween(begin: .975, end: 1.0)),
+                     child: child,
+                   ),
            );
          },
        ) {
     willDisposeAnimationController = false;
   }
   final AnimationController motion;
+  final bool foldAware;
   @override
   AnimationController createAnimationController() => motion;
 }

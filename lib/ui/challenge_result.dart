@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'challenge_instruments.dart';
 import 'design.dart';
+import 'fold_layout.dart';
 import 'space_controls.dart';
 
 /// A finished rapid-fire set stays in its own signal language, with no Voyage
@@ -28,6 +29,7 @@ class ChallengeResult extends StatelessWidget {
     this.reduceMotion = false,
     this.hasCompleteTiming = true,
     this.hasCompleteScore = true,
+    this.panes,
   });
   final bool weekly, medalEarned, hasNewChallenge, reduceMotion;
   final bool hasCompleteTiming, hasCompleteScore;
@@ -38,6 +40,7 @@ class ChallengeResult extends StatelessWidget {
   final VoidCallback onVoyage, onCollection;
   final VoidCallback? onNewChallenge;
   final DateTime Function()? now;
+  final FoldPaneLayout? panes;
 
   String get _title =>
       weekly ? 'Weekly Gauntlet complete' : 'Daily Sprint complete';
@@ -61,13 +64,17 @@ class ChallengeResult extends StatelessWidget {
     container: true,
     child: Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 900, maxHeight: 900),
+        constraints: panes == null
+            ? const BoxConstraints(maxWidth: 900, maxHeight: 900)
+            : const BoxConstraints(),
         child: LayoutBuilder(
           builder: (context, bounds) {
             final landscape =
                 bounds.maxWidth >= 520 &&
                 bounds.maxWidth > bounds.maxHeight * 1.1;
-            final short = bounds.maxHeight < 640;
+            final short = panes != null
+                ? panes!.actionRect.height < 640
+                : bounds.maxHeight < 640;
             final title = SizedBox(
               height: short ? 42 : 62,
               child: Semantics(
@@ -248,6 +255,54 @@ class ChallengeResult extends StatelessWidget {
                 ],
               ),
             );
+            if (panes != null) {
+              final media = MediaQuery.of(context);
+              Widget pane(Rect rect, String key, Widget content) =>
+                  Positioned.fromRect(
+                    rect: rect,
+                    child: ClipRect(
+                      key: ValueKey(key),
+                      child: MediaQuery(
+                        data: FoldPaneLayout.paneMediaQuery(media, rect),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: content,
+                        ),
+                      ),
+                    ),
+                  );
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  pane(
+                    panes!.missionRect,
+                    'challenge-result-mission-pane',
+                    Column(
+                      children: [
+                        title,
+                        Expanded(child: score),
+                      ],
+                    ),
+                  ),
+                  pane(
+                    panes!.actionRect,
+                    'challenge-result-action-pane',
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        metrics,
+                        reward,
+                        const SizedBox(height: 8),
+                        reset,
+                        const SizedBox(height: 12),
+                        actions,
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            }
             return Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: bounds.maxWidth > 800 ? 24 : 8,
@@ -354,10 +409,12 @@ class ChallengeRetryOverlay extends StatelessWidget {
     required this.stageCount,
     required this.onRetry,
     this.reduceMotion = false,
+    this.panes,
   });
   final int stage, stageCount;
   final VoidCallback onRetry;
   final bool reduceMotion;
+  final FoldPaneLayout? panes;
   @override
   Widget build(BuildContext context) {
     final still =
@@ -388,7 +445,7 @@ class ChallengeRetryOverlay extends StatelessWidget {
                 builder: (context, value, child) => Opacity(
                   opacity: value,
                   child: Transform.scale(
-                    scale: .97 + value * .03,
+                    scale: panes == null ? .97 + value * .03 : 1,
                     child: child,
                   ),
                 ),
@@ -460,6 +517,41 @@ class ChallengeRetryOverlay extends StatelessWidget {
                         ),
                       ],
                     );
+                    if (panes != null) {
+                      final media = MediaQuery.of(context);
+                      Widget pane(Rect rect, String key, Widget content) =>
+                          Positioned.fromRect(
+                            rect: rect,
+                            child: ClipRect(
+                              key: ValueKey(key),
+                              child: MediaQuery(
+                                data: FoldPaneLayout.paneMediaQuery(
+                                  media,
+                                  rect,
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(20),
+                                  child: content,
+                                ),
+                              ),
+                            ),
+                          );
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          pane(
+                            panes!.missionRect,
+                            'challenge-retry-mission-pane',
+                            art,
+                          ),
+                          pane(
+                            panes!.actionRect,
+                            'challenge-retry-action-pane',
+                            details,
+                          ),
+                        ],
+                      );
+                    }
                     return SizedBox.expand(
                       child: Padding(
                         padding: const EdgeInsets.all(24),

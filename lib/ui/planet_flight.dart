@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:material_ui/material_ui.dart';
 
 import 'design.dart';
+import 'fold_layout.dart';
 import 'mission_briefing.dart';
 import 'space_controls.dart';
 import 'space_scenery.dart';
@@ -16,11 +17,13 @@ class PlanetFlight extends StatefulWidget {
     required this.beats,
     required this.onComplete,
     this.reduceMotion = false,
+    this.panes,
   });
   final VoyageWorld world;
   final List<MissionBriefingBeat> beats;
   final VoidCallback onComplete;
   final bool reduceMotion;
+  final FoldPaneLayout? panes;
   @override
   State<PlanetFlight> createState() => _PlanetFlightState();
 }
@@ -129,6 +132,9 @@ class _PlanetFlightState extends State<PlanetFlight>
           color: Palette.paper,
           child: LayoutBuilder(
             builder: (context, bounds) {
+              if (widget.panes != null) {
+                return _foldPresentation(context, widget.panes!);
+              }
               final wide = bounds.maxWidth > bounds.maxHeight * 1.2;
               return Stack(
                 fit: StackFit.expand,
@@ -251,6 +257,90 @@ class _PlanetFlightState extends State<PlanetFlight>
       ),
     ),
   );
+
+  Widget _foldPresentation(BuildContext context, FoldPaneLayout panes) {
+    final media = MediaQuery.of(context);
+    Widget pane(Rect rect, String key, Widget child) => Positioned.fromRect(
+      rect: rect,
+      child: ClipRect(
+        key: ValueKey(key),
+        child: MediaQuery(
+          data: FoldPaneLayout.paneMediaQuery(media, rect),
+          child: child,
+        ),
+      ),
+    );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        pane(
+          panes.missionRect,
+          'transit-mission-pane',
+          ExcludeSemantics(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                CustomPaint(
+                  painter: _TransitPainter(
+                    world: widget.world,
+                    travel: _travel,
+                    wide: false,
+                    centered: true,
+                  ),
+                ),
+                const CustomPaint(painter: _IllustratedCockpitPainter()),
+              ],
+            ),
+          ),
+        ),
+        pane(
+          panes.actionRect,
+          'transit-action-pane',
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.world.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: bookTitle(
+                          MediaQuery.textScalerOf(context).scale(1) > 1.5
+                              ? 16
+                              : 26,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    AnimatedBuilder(
+                      animation: _travel,
+                      builder: (context, _) => _travel.isCompleted
+                          ? const SizedBox(width: 48, height: 48)
+                          : OrbitUtility(
+                              key: const ValueKey('skip-planet-flight'),
+                              label: 'Arrive now. Keep reading the briefing.',
+                              icon: Icons.fast_forward_rounded,
+                              width: 48,
+                              reduceMotion: _still,
+                              onPressed: _arrive,
+                            ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Expanded(child: _briefingContent()),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   Widget _briefingContent() => LayoutBuilder(
     builder: (context, bounds) {
@@ -470,16 +560,23 @@ class _TransitPainter extends CustomPainter {
     required this.world,
     required this.travel,
     required this.wide,
+    this.centered = false,
   }) : super(repaint: travel);
   final VoyageWorld world;
   final Animation<double> travel;
   final bool wide;
+  final bool centered;
   @override
   void paint(Canvas canvas, Size size) {
     final t = travel.value, approach = Curves.easeInOutCubic.transform(t);
     final horizon = Offset(
       size.width * (wide ? .28 : .5),
-      size.height * (wide ? .48 : .31),
+      size.height *
+          (centered
+              ? .5
+              : wide
+              ? .48
+              : .31),
     );
     final bank = math.sin(t * math.pi * 2) * .035 * (1 - t);
     canvas.save();
@@ -539,6 +636,7 @@ class _TransitPainter extends CustomPainter {
   bool shouldRepaint(_TransitPainter old) =>
       old.world.planetIndex != world.planetIndex ||
       old.wide != wide ||
+      old.centered != centered ||
       old.travel != travel;
 }
 

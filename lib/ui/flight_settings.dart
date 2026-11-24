@@ -49,6 +49,7 @@ class _FlightSettingsState extends State<FlightSettings> {
         final largeType = MediaQuery.textScalerOf(context).scale(1) >= 1.3;
         final dense = largeType || bounds.maxHeight < 500;
         final roomy = !dense;
+        final shortPane = bounds.maxHeight < 330;
 
         final restart = SpaceAction(
           key: const ValueKey('restart'),
@@ -68,12 +69,13 @@ class _FlightSettingsState extends State<FlightSettings> {
                 Difficulty.balanced => 'Steady',
                 Difficulty.bright => 'Bright',
               },
-              description:
-                  '${switch (difficulty) {
-                    Difficulty.gentle => 'Alternate route',
-                    Difficulty.balanced => 'Default route',
-                    Difficulty.bright => 'Faster clock',
-                  }} · ${launchBudget(difficulty: difficulty, level: game.journeyLevel, progressive: true).inSeconds}s',
+              description: shortPane && largeType
+                  ? '${launchBudget(difficulty: difficulty, level: game.journeyLevel, progressive: true).inSeconds}s'
+                  : '${switch (difficulty) {
+                      Difficulty.gentle => 'Alternate route',
+                      Difficulty.balanced => 'Default route',
+                      Difficulty.bright => 'Faster clock',
+                    }} · ${launchBudget(difficulty: difficulty, level: game.journeyLevel, progressive: true).inSeconds}s',
               selected: game.difficulty == difficulty,
               onPressed: () => game.setDifficulty(difficulty),
               reduceMotion: reduced,
@@ -121,7 +123,9 @@ class _FlightSettingsState extends State<FlightSettings> {
               ),
           ],
         );
-        final pacePages = largeType ? paceChoices : <Widget>[pace];
+        final pacePages = largeType || (shortPane && bounds.maxWidth <= 450)
+            ? paceChoices
+            : <Widget>[pace];
         final resourceActions = <Widget>[
           SpaceAction(
             key: const ValueKey('open-flight-support'),
@@ -237,9 +241,9 @@ class _FlightSettingsState extends State<FlightSettings> {
                       child: FlightLessonArt(kind: 'rewards'),
                     ),
                   collectionHeading,
-                  const SizedBox(height: 8),
+                  SizedBox(height: shortPane ? 4 : 8),
                   collectionProgress,
-                  const SizedBox(height: 8),
+                  SizedBox(height: shortPane ? 4 : 8),
                   collectionStats,
                 ],
               );
@@ -262,7 +266,7 @@ class _FlightSettingsState extends State<FlightSettings> {
                   : (widget.demo ? 'Local preview' : 'Your flight data'),
               style: bookTitle(dense ? 18 : 24),
             ),
-            const SizedBox(height: 10),
+            SizedBox(height: shortPane ? 4 : 10),
             Text(
               widget.demo
                   ? (dense
@@ -274,7 +278,7 @@ class _FlightSettingsState extends State<FlightSettings> {
               style: TextStyle(
                 fontSize: dense ? 13 : 15,
                 color: Palette.secondary,
-                height: 1.5,
+                height: shortPane ? 1.25 : 1.5,
               ),
             ),
             if (!dense) ...[const SizedBox(height: 18), licenses],
@@ -399,26 +403,29 @@ class _FlightSettingsState extends State<FlightSettings> {
 
         return Column(
           children: [
-            Row(
-              children: [
-                for (final (index, label) in [
-                  'Flight',
-                  'Feel',
-                  'About',
-                ].indexed)
-                  Expanded(
-                    child: OrbitMode(
-                      key: ValueKey('settings-section-$index'),
-                      label: label,
-                      selected: _section == index,
-                      onPressed: () => setState(() {
-                        _section = index;
-                        _page = 0;
-                      }),
-                      reduceMotion: reduced,
+            SizedBox(
+              height: shortPane ? 48 : null,
+              child: Row(
+                children: [
+                  for (final (index, label) in [
+                    'Flight',
+                    'Feel',
+                    'About',
+                  ].indexed)
+                    Expanded(
+                      child: OrbitMode(
+                        key: ValueKey('settings-section-$index'),
+                        label: label,
+                        selected: _section == index,
+                        onPressed: () => setState(() {
+                          _section = index;
+                          _page = 0;
+                        }),
+                        reduceMotion: reduced,
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
             Expanded(
               child: FlightPageSurface(
@@ -443,37 +450,40 @@ class _FlightSettingsState extends State<FlightSettings> {
               ),
             ),
             if (pages.length > 1)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _pager(
-                    'settings-previous',
-                    'Previous',
-                    Icons.chevron_left_rounded,
-                    page > 0 ? () => setState(() => _page = page - 1) : null,
-                    reduced,
-                  ),
-                  Semantics(
-                    label: 'Page ${page + 1} of ${pages.length}',
-                    child: Text(
-                      '${page + 1} / ${pages.length}',
-                      key: const ValueKey('settings-page'),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Palette.secondary,
+              SizedBox(
+                height: shortPane ? 48 : null,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _pager(
+                      'settings-previous',
+                      'Previous',
+                      Icons.chevron_left_rounded,
+                      page > 0 ? () => setState(() => _page = page - 1) : null,
+                      reduced,
+                    ),
+                    Semantics(
+                      label: 'Page ${page + 1} of ${pages.length}',
+                      child: Text(
+                        '${page + 1} / ${pages.length}',
+                        key: const ValueKey('settings-page'),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Palette.secondary,
+                        ),
                       ),
                     ),
-                  ),
-                  _pager(
-                    'settings-next',
-                    'Next',
-                    Icons.chevron_right_rounded,
-                    page + 1 < pages.length
-                        ? () => setState(() => _page = page + 1)
-                        : null,
-                    reduced,
-                  ),
-                ],
+                    _pager(
+                      'settings-next',
+                      'Next',
+                      Icons.chevron_right_rounded,
+                      page + 1 < pages.length
+                          ? () => setState(() => _page = page + 1)
+                          : null,
+                      reduced,
+                    ),
+                  ],
+                ),
               ),
           ],
         );

@@ -55,7 +55,10 @@ class _FlightSupportPanelState extends State<FlightSupportPanel> {
           0 => dense ? 'One legal turn.' : 'Get one legal turn when you need a nudge. Return to the board to use it.',
           _ => dense ? 'No stars.' : 'Move to the next Voyage route. A skip earns no stars or league score.',
         };
-        final shortWide = bounds.maxWidth > 460 && bounds.maxHeight < 420;
+        final shortPane = bounds.maxHeight < 330;
+        final shortWide =
+            (bounds.maxWidth > 460 && bounds.maxHeight < 420) ||
+            (shortPane && bounds.maxWidth > 300);
         final summary = Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -90,32 +93,40 @@ class _FlightSupportPanelState extends State<FlightSupportPanel> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (_page == 1) ...[
-              SpaceAction(
-                key: const ValueKey('skip-level'),
-                label: dense ? 'Skip' : 'Skip this route',
-                compact: true,
-                onPressed: skipReady
-                    ? () {
-                        if (support.consumeSkip()) widget.onSkip();
-                      }
-                    : null,
-                reduceMotion: widget.reduceMotion,
+              SizedBox(
+                height: shortPane ? 48 : null,
+                child: SpaceAction(
+                  key: const ValueKey('skip-level'),
+                  label: dense ? 'Skip' : 'Skip this route',
+                  compact: true,
+                  onPressed: skipReady
+                      ? () {
+                          if (support.consumeSkip()) widget.onSkip();
+                        }
+                      : null,
+                  reduceMotion: widget.reduceMotion,
+                ),
               ),
               if (rewards) const SizedBox(height: 8),
             ],
             if (rewards)
-              SpaceAction(
-                key: ValueKey(_page == 0 ? 'reward-hints' : 'reward-skip'),
-                label: preview && dense
-                    ? (_page == 0 ? '+3 hints' : '+1 skip')
-                    : preview
-                    ? (_page == 0 ? 'Preview +3 hints' : 'Preview +1 skip')
-                    : (_page == 0 ? 'Watch ad · 3 hints' : 'Watch ad · 1 skip'),
-                compact: true,
-                onPressed: support.busy
-                    ? null
-                    : () => support.earnReward(skip: _page == 1),
-                reduceMotion: widget.reduceMotion,
+              SizedBox(
+                height: shortPane ? 48 : null,
+                child: SpaceAction(
+                  key: ValueKey(_page == 0 ? 'reward-hints' : 'reward-skip'),
+                  label: preview && dense
+                      ? (_page == 0 ? '+3 hints' : '+1 skip')
+                      : preview
+                      ? (_page == 0 ? 'Preview +3 hints' : 'Preview +1 skip')
+                      : (_page == 0
+                            ? 'Watch ad · 3 hints'
+                            : 'Watch ad · 1 skip'),
+                  compact: true,
+                  onPressed: support.busy
+                      ? null
+                      : () => support.earnReward(skip: _page == 1),
+                  reduceMotion: widget.reduceMotion,
+                ),
               ),
             if (support.message != null && dense)
               Semantics(
@@ -182,18 +193,21 @@ class _FlightSupportPanelState extends State<FlightSupportPanel> {
                 ),
               ),
             ),
-            Row(
-              children: [
-                for (final (index, title) in ['Hints', 'Skips'].indexed)
-                  Expanded(
-                    child: OrbitMode(
-                      label: title,
-                      selected: _page == index,
-                      onPressed: () => setState(() => _page = index),
-                      reduceMotion: widget.reduceMotion,
+            SizedBox(
+              height: shortPane ? 48 : null,
+              child: Row(
+                children: [
+                  for (final (index, title) in ['Hints', 'Skips'].indexed)
+                    Expanded(
+                      child: OrbitMode(
+                        label: title,
+                        selected: _page == index,
+                        onPressed: () => setState(() => _page = index),
+                        reduceMotion: widget.reduceMotion,
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
             if (!preview && FlightSupport.adsEnabled)
               TextButton(

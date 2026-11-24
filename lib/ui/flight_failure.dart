@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:material_ui/material_ui.dart';
 
 import 'design.dart';
+import 'fold_layout.dart';
 import 'orbital_craft.dart';
 import 'space_controls.dart';
 
@@ -127,6 +128,7 @@ class FlightFailureOverlay extends StatefulWidget {
     required this.onRetry,
     this.reduceMotion = false,
     this.trailColor = Palette.light,
+    this.panes,
   });
   static const departureDuration = Duration(milliseconds: 6000);
   static const snapDuration = Duration(milliseconds: 2000);
@@ -135,6 +137,7 @@ class FlightFailureOverlay extends StatefulWidget {
   final VoidCallback onRetry;
   final bool reduceMotion;
   final Color trailColor;
+  final FoldPaneLayout? panes;
   @override
   State<FlightFailureOverlay> createState() => _FlightFailureOverlayState();
 }
@@ -192,241 +195,396 @@ class _FlightFailureOverlayState extends State<FlightFailureOverlay>
           child: CustomPaint(
             key: const ValueKey('flight-failure-cover'),
             painter: _FailureSky(_departure, still: _still),
-            child: SafeArea(
-              child: LayoutBuilder(
-                builder: (context, bounds) {
-                  final scaler = MediaQuery.textScalerOf(context);
-                  final large = scaler.scale(16) > 27;
-                  final landscape =
-                      bounds.maxWidth > 600 &&
-                      bounds.maxWidth > bounds.maxHeight * 1.1;
-                  final padding = bounds.maxHeight < 400 ? 12.0 : 20.0;
-                  final width = math.min(
-                    bounds.maxWidth - padding * 2,
-                    landscape ? 1080.0 : 480.0,
-                  );
-                  final height = math.max(0.0, bounds.maxHeight - padding * 2);
-                  final recoveryWidth = landscape
-                      ? math.min(width, 520.0)
-                      : width;
-                  final titleStyle = bookTitle(large ? 22 : 32);
-                  final causeStyle = TextStyle(
-                    color: Palette.white,
-                    fontSize: large ? 14 : 16,
-                    height: 1.4,
-                  );
-                  final cause = large
-                      ? 'Route broken.'
-                      : 'The route broke. Your rocket drifted away.';
-                  const savedStyle = TextStyle(
-                    color: Palette.secondary,
-                    fontSize: 14,
-                    height: 1.4,
-                  );
-                  double textHeight(String text, TextStyle style, double w) {
-                    final painter = TextPainter(
-                      text: TextSpan(
-                        text: text,
-                        style: DefaultTextStyle.of(context).style.merge(style),
-                      ),
-                      textDirection: Directionality.of(context),
-                      textScaler: scaler,
-                    )..layout(maxWidth: w);
-                    return painter.height;
-                  }
-
-                  final compact = large || landscape;
-                  final buttonHeight = math.max(
-                    compact ? 48.0 : 54.0,
-                    scaler.scale(compact ? 14 : 15) * 1.5 + (compact ? 16 : 30),
-                  );
-                  final baseHeight =
-                      textHeight('Signal lost', titleStyle, recoveryWidth) +
-                      8 +
-                      textHeight(cause, causeStyle, recoveryWidth) +
-                      14 +
-                      buttonHeight;
-                  final savedHeight =
-                      textHeight(
-                        'Your route is saved.',
-                        savedStyle,
-                        recoveryWidth,
-                      ) +
-                      8;
-                  final showSaved =
-                      baseHeight + savedHeight + (landscape ? 0 : 110) < height;
-                  final recoveryHeight =
-                      baseHeight + (showSaved ? savedHeight : 0);
-                  final stillGraphicSpace = (height - recoveryHeight) / 2 - 8;
-                  final graphicHeight = landscape
-                      ? _still
-                            ? math.min(180.0, math.max(64.0, stillGraphicSpace))
-                            : math.min(height, 440.0)
-                      : math.min(
-                          400.0,
-                          math.max(64.0, height - recoveryHeight - 14),
+            child: widget.panes != null
+                ? _foldPresentation(context, widget.panes!)
+                : SafeArea(
+                    child: LayoutBuilder(
+                      builder: (context, bounds) {
+                        final scaler = MediaQuery.textScalerOf(context);
+                        final large = scaler.scale(16) > 27;
+                        final landscape =
+                            bounds.maxWidth > 600 &&
+                            bounds.maxWidth > bounds.maxHeight * 1.1;
+                        final padding = bounds.maxHeight < 400 ? 12.0 : 20.0;
+                        final width = math.min(
+                          bounds.maxWidth - padding * 2,
+                          landscape ? 1080.0 : 480.0,
                         );
-                  final illustration = ExcludeSemantics(
-                    child: SizedBox(
-                      height: graphicHeight,
-                      child: CustomPaint(
-                        key: const ValueKey('flight-failure-rocket'),
-                        painter: LostRocketPainter(
-                          _departure,
-                          reducedMotion: _still,
-                          trailColor: widget.trailColor,
-                        ),
-                      ),
-                    ),
-                  );
-                  final recovery = Column(
-                    key: const ValueKey('flight-failure-recovery'),
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Semantics(
-                        liveRegion: true,
-                        label: 'Signal lost. The route broke and your rocket drifted away. Your route is saved. Retry appears after the drift.',
-                        child: ExcludeSemantics(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Signal lost',
-                                style: titleStyle,
-                                textAlign: TextAlign.center,
+                        final height = math.max(
+                          0.0,
+                          bounds.maxHeight - padding * 2,
+                        );
+                        final recoveryWidth = landscape
+                            ? math.min(width, 520.0)
+                            : width;
+                        final titleStyle = bookTitle(large ? 22 : 32);
+                        final causeStyle = TextStyle(
+                          color: Palette.white,
+                          fontSize: large ? 14 : 16,
+                          height: 1.4,
+                        );
+                        final cause = large
+                            ? 'Route broken.'
+                            : 'The route broke. Your rocket drifted away.';
+                        const savedStyle = TextStyle(
+                          color: Palette.secondary,
+                          fontSize: 14,
+                          height: 1.4,
+                        );
+                        double textHeight(
+                          String text,
+                          TextStyle style,
+                          double w,
+                        ) {
+                          final painter = TextPainter(
+                            text: TextSpan(
+                              text: text,
+                              style: DefaultTextStyle.of(context).style
+                                  .merge(style),
+                            ),
+                            textDirection: Directionality.of(context),
+                            textScaler: scaler,
+                          )..layout(maxWidth: w);
+                          return painter.height;
+                        }
+
+                        final compact = large || landscape;
+                        final buttonHeight = math.max(
+                          compact ? 48.0 : 54.0,
+                          scaler.scale(compact ? 14 : 15) * 1.5 +
+                              (compact ? 16 : 30),
+                        );
+                        final baseHeight =
+                            textHeight(
+                              'Signal lost',
+                              titleStyle,
+                              recoveryWidth,
+                            ) +
+                            8 +
+                            textHeight(cause, causeStyle, recoveryWidth) +
+                            14 +
+                            buttonHeight;
+                        final savedHeight =
+                            textHeight(
+                              'Your route is saved.',
+                              savedStyle,
+                              recoveryWidth,
+                            ) +
+                            8;
+                        final showSaved =
+                            baseHeight + savedHeight + (landscape ? 0 : 110) <
+                            height;
+                        final recoveryHeight =
+                            baseHeight + (showSaved ? savedHeight : 0);
+                        final stillGraphicSpace =
+                            (height - recoveryHeight) / 2 - 8;
+                        final graphicHeight = landscape
+                            ? _still
+                                  ? math.min(
+                                      180.0,
+                                      math.max(64.0, stillGraphicSpace),
+                                    )
+                                  : math.min(height, 440.0)
+                            : math.min(
+                                400.0,
+                                math.max(64.0, height - recoveryHeight - 14),
+                              );
+                        final illustration = ExcludeSemantics(
+                          child: SizedBox(
+                            height: graphicHeight,
+                            child: CustomPaint(
+                              key: const ValueKey('flight-failure-rocket'),
+                              painter: LostRocketPainter(
+                                _departure,
+                                reducedMotion: _still,
+                                trailColor: widget.trailColor,
                               ),
-                              const SizedBox(height: 8),
-                              Text(
-                                cause,
-                                style: causeStyle,
-                                textAlign: TextAlign.center,
-                              ),
-                              if (showSaved) ...[
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Your route is saved.',
-                                  style: savedStyle,
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      AnimatedBuilder(
-                        animation: _departure,
-                        builder: (context, _) {
-                          final opacity = _still
-                              ? 1.0
-                              : FlightFailureFrame.retryProgress(
-                                  _departure.value,
-                                );
-                          final available = opacity >= .5;
-                          return IgnorePointer(
-                            ignoring: !available,
-                            child: ExcludeFocus(
-                              excluding: !available,
+                        );
+                        final recovery = Column(
+                          key: const ValueKey('flight-failure-recovery'),
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Semantics(
+                              liveRegion: true,
+                              label: 'Signal lost. The route broke and your rocket drifted away. Your route is saved. Retry appears after the drift.',
                               child: ExcludeSemantics(
-                                excluding: !available,
-                                child: Opacity(
-                                  opacity: opacity,
-                                  child: SpaceAction(
-                                    key: const ValueKey('retry-flight'),
-                                    label: 'Retry',
-                                    icon: Icons.replay_rounded,
-                                    onPressed: available
-                                        ? widget.onRetry
-                                        : null,
-                                    reduceMotion: _still,
-                                    compact: compact,
-                                  ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Signal lost',
+                                      style: titleStyle,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      cause,
+                                      style: causeStyle,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    if (showSaved) ...[
+                                      const SizedBox(height: 8),
+                                      const Text(
+                                        'Your route is saved.',
+                                        style: savedStyle,
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               ),
                             ),
-                          );
-                        },
-                      ),
-                    ],
-                  );
-                  return Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(padding),
-                      child: SizedBox(
-                        width: width,
-                        child: landscape
-                            ? SizedBox(
-                                height: height,
-                                child: Stack(
-                                  children: [
-                                    // The flight owns the center of the screen.
-                                    // Its recovery controls keep that same axis
-                                    // after the ship disappears, rather than
-                                    // retaining an empty illustration column.
-                                    if (!_still)
-                                      Center(
-                                        child: SizedBox(
-                                          width: width,
-                                          child: illustration,
-                                        ),
-                                      )
-                                    else if (stillGraphicSpace >= 80)
-                                      Align(
-                                        alignment: Alignment.topCenter,
-                                        child: SizedBox(
-                                          width: recoveryWidth,
-                                          child: illustration,
-                                        ),
-                                      ),
-                                    Center(
-                                      child: SizedBox(
-                                        width: recoveryWidth,
-                                        child: AnimatedBuilder(
-                                          animation: _departure,
-                                          child: recovery,
-                                          builder: (context, child) => Opacity(
-                                            // Keep the result stationary while
-                                            // the film dissolves into it.
-                                            opacity: _still
-                                                ? 1
-                                                : Curves.easeInOutCubic
-                                                      .transform(
-                                                        ((_departure.value *
-                                                                        6000 -
-                                                                    4200) /
-                                                                1000)
-                                                            .clamp(0.0, 1.0),
-                                                      ),
-                                            alwaysIncludeSemantics: true,
-                                            child: child,
-                                          ),
+                            const SizedBox(height: 14),
+                            AnimatedBuilder(
+                              animation: _departure,
+                              builder: (context, _) {
+                                final opacity = _still
+                                    ? 1.0
+                                    : FlightFailureFrame.retryProgress(
+                                        _departure.value,
+                                      );
+                                final available = opacity >= .5;
+                                return IgnorePointer(
+                                  ignoring: !available,
+                                  child: ExcludeFocus(
+                                    excluding: !available,
+                                    child: ExcludeSemantics(
+                                      excluding: !available,
+                                      child: Opacity(
+                                        opacity: opacity,
+                                        child: SpaceAction(
+                                          key: const ValueKey('retry-flight'),
+                                          label: 'Retry',
+                                          icon: Icons.replay_rounded,
+                                          onPressed: available
+                                              ? widget.onRetry
+                                              : null,
+                                          reduceMotion: _still,
+                                          compact: compact,
                                         ),
                                       ),
                                     ),
-                                  ],
-                                ),
-                              )
-                            : Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  illustration,
-                                  const SizedBox(height: 14),
-                                  recovery,
-                                ],
-                              ),
-                      ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        );
+                        return Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(padding),
+                            child: SizedBox(
+                              width: width,
+                              child: landscape
+                                  ? SizedBox(
+                                      height: height,
+                                      child: Stack(
+                                        children: [
+                                          // The flight owns the center of the screen.
+                                          // Its recovery controls keep that same axis
+                                          // after the ship disappears, rather than
+                                          // retaining an empty illustration column.
+                                          if (!_still)
+                                            Center(
+                                              child: SizedBox(
+                                                width: width,
+                                                child: illustration,
+                                              ),
+                                            )
+                                          else if (stillGraphicSpace >= 80)
+                                            Align(
+                                              alignment: Alignment.topCenter,
+                                              child: SizedBox(
+                                                width: recoveryWidth,
+                                                child: illustration,
+                                              ),
+                                            ),
+                                          Center(
+                                            child: SizedBox(
+                                              width: recoveryWidth,
+                                              child: AnimatedBuilder(
+                                                animation: _departure,
+                                                child: recovery,
+                                                builder: (context, child) => Opacity(
+                                                  // Keep the result stationary while
+                                                  // the film dissolves into it.
+                                                  opacity: _still
+                                                      ? 1
+                                                      : Curves.easeInOutCubic
+                                                            .transform(
+                                                              ((_departure.value *
+                                                                              6000 -
+                                                                          4200) /
+                                                                      1000)
+                                                                  .clamp(
+                                                                    0.0,
+                                                                    1.0,
+                                                                  ),
+                                                            ),
+                                                  alwaysIncludeSemantics: true,
+                                                  child: child,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        illustration,
+                                        const SizedBox(height: 14),
+                                        recovery,
+                                      ],
+                                    ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
-            ),
+                  ),
           ),
         ),
       ),
     ),
   );
+
+  Widget _foldPresentation(BuildContext context, FoldPaneLayout panes) {
+    final media = MediaQuery.of(context);
+    Widget pane(Rect rect, String key, Widget child) => Positioned.fromRect(
+      rect: rect,
+      child: ClipRect(
+        key: ValueKey(key),
+        child: MediaQuery(
+          data: FoldPaneLayout.paneMediaQuery(media, rect),
+          child: SafeArea(child: child),
+        ),
+      ),
+    );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        pane(
+          panes.missionRect,
+          'failure-mission-pane',
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: ExcludeSemantics(
+              child: CustomPaint(
+                key: const ValueKey('flight-failure-rocket'),
+                painter: LostRocketPainter(
+                  _departure,
+                  reducedMotion: _still,
+                  trailColor: widget.trailColor,
+                ),
+              ),
+            ),
+          ),
+        ),
+        pane(
+          panes.actionRect,
+          'failure-action-pane',
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: LayoutBuilder(
+              builder: (context, bounds) {
+                final large = MediaQuery.textScalerOf(context).scale(1) > 1.5;
+                return Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 520),
+                    child: Column(
+                      key: const ValueKey('flight-failure-recovery'),
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Semantics(
+                          liveRegion: true,
+                          label: 'Signal lost. The route broke and your rocket drifted away. Your route is saved. Retry appears after the drift.',
+                          child: ExcludeSemantics(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Signal lost',
+                                  style: bookTitle(large ? 22 : 32),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  large ? 'Route broken.' : 'The route broke. Your rocket drifted away.',
+                                  style: TextStyle(
+                                    color: Palette.white,
+                                    fontSize: large ? 14 : 16,
+                                    height: 1.4,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                if (!large && bounds.maxHeight >= 280) ...[
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Your route is saved.',
+                                    style: TextStyle(
+                                      color: Palette.secondary,
+                                      fontSize: 14,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        AnimatedBuilder(
+                          animation: _departure,
+                          builder: (context, _) {
+                            final opacity = _still
+                                ? 1.0
+                                : FlightFailureFrame.retryProgress(
+                                    _departure.value,
+                                  );
+                            final available = opacity >= .5;
+                            return IgnorePointer(
+                              ignoring: !available,
+                              child: ExcludeFocus(
+                                excluding: !available,
+                                child: ExcludeSemantics(
+                                  excluding: !available,
+                                  child: Opacity(
+                                    opacity: opacity,
+                                    child: SpaceAction(
+                                      key: const ValueKey('retry-flight'),
+                                      label: 'Retry',
+                                      icon: Icons.replay_rounded,
+                                      onPressed: available
+                                          ? widget.onRetry
+                                          : null,
+                                      reduceMotion: _still,
+                                      compact: true,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _FailureSky extends CustomPainter {

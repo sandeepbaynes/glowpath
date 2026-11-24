@@ -98,7 +98,7 @@ class _EarnedSupplyPanelState extends State<EarnedSupplyPanel> {
       '$_title. $_description '
       'Costs $_cost earned coins. ${_page == 1 ? '' : '$_count stored. '}'
       'You have ${widget.game.coinBalance} coins. '
-      '${_page == 1 ? 'Skips are available on your current Voyage route, not on replays or daily and weekly challenges. ' : 'Buying stores a resource; it is only used when you choose Use. '} '
+      '${_page == 1 ? 'Skips are available on your current Voyage route, not on replays or daily and weekly challenges. ' : 'Exchanging coins stores a resource; it is only used when you choose Use. '} '
       'Hints and powers mark the result as assisted. Earn coins by completing new routes, improving score tiers and collecting optional cargo. '
       'This shelf spends game coins, not money.';
 
@@ -163,8 +163,8 @@ class _EarnedSupplyPanelState extends State<EarnedSupplyPanel> {
                   ),
                   OrbitUtility(
                     key: const ValueKey('earned-supply-store'),
-                    label: 'Ads and purchases',
-                    icon: Icons.shopping_bag_outlined,
+                    label: 'Free flight support',
+                    icon: Icons.auto_awesome_outlined,
                     width: 48,
                     reduceMotion: _still,
                     onPressed: widget.onLegacyStore,
@@ -295,7 +295,7 @@ class _EarnedSupplyPanelState extends State<EarnedSupplyPanel> {
                       key: ValueKey('earned-supply-buy-$_page'),
                       label: _page == 1
                           ? 'Skip · 75 coins'
-                          : 'Buy · $_cost coins',
+                          : 'Get · $_cost coins',
                       compact: compact,
                       reduceMotion: _still,
                       onPressed: _page == 1

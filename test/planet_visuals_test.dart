@@ -64,8 +64,46 @@ void main() {
         expect(find.byType(Scrollable), findsNothing);
         final action = find.byKey(const ValueKey('briefing-start'));
         expect(action.hitTestable(), findsOneWidget);
-        await tester.tap(action);
+        if (scale == 1) {
+          expect(tester.widget<SpaceAction>(action).label, "Let's fly");
+          await tester.tap(action);
+        } else {
+          final chunks = <String>[];
+          for (var page = 0; page < 50 && starts == 0; page++) {
+            final copy = find.byKey(const ValueKey('briefing-copy'));
+            chunks.add(tester.widget<Text>(copy).data!);
+            final paragraph = tester.renderObject<RenderParagraph>(copy);
+            expect(
+              paragraph.getMaxIntrinsicHeight(paragraph.size.width),
+              lessThanOrEqualTo(paragraph.size.height + .01),
+            );
+            final actionBounds = tester.getRect(action);
+            expect(action.hitTestable(), findsOneWidget);
+            expect(actionBounds.top, greaterThanOrEqualTo(0));
+            expect(actionBounds.bottom, lessThanOrEqualTo(size.height));
+            expect(actionBounds.height, greaterThanOrEqualTo(48));
+            final finalPage =
+                tester.widget<SpaceAction>(action).label == "Let's fly";
+            expect(
+              tester.widget<SpaceAction>(action).label,
+              finalPage ? "Let's fly" : 'Next',
+            );
+            await tester.tap(action);
+            await tester.pump();
+            expect(starts, finalPage ? 1 : 0);
+            expect(tester.takeException(), isNull);
+          }
+          expect(
+            chunks.join('').replaceAll(RegExp(r'\s'), ''),
+            firstFlightBriefing
+                .map((beat) => beat.text)
+                .join('')
+                .replaceAll(RegExp(r'\s'), ''),
+          );
+        }
         expect(starts, 1);
+        expect(find.byType(Scrollable), findsNothing);
+        expect(tester.takeException(), isNull);
       });
     }
   }

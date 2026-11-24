@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:glowpath/game/game_controller.dart';
 import 'package:glowpath/main.dart';
@@ -6,6 +7,7 @@ import 'package:glowpath/ui/launch_countdown.dart';
 import 'package:glowpath/ui/mission_briefing.dart';
 import 'package:glowpath/ui/puzzle_board.dart';
 import 'package:glowpath/ui/planet_flight.dart';
+import 'package:glowpath/ui/space_controls.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -63,8 +65,60 @@ void main() {
           const Duration(seconds: 30),
         );
         expect(game.moves, 0);
-        await tester.tap(start);
-        await tester.pump();
+        if (scale == 1) {
+          // The normal-size briefing remains a single action.
+          expect(tester.widget<SpaceAction>(start).label, "Let's fly");
+          await tester.tap(start);
+          await tester.pump();
+        } else {
+          final chunks = <String>[];
+          for (var page = 0; page < 50 && !game.onboardingSeen; page++) {
+            final copy = find.byKey(const ValueKey('briefing-copy'));
+            chunks.add(tester.widget<Text>(copy).data!);
+            final paragraph = tester.renderObject<RenderParagraph>(copy);
+            expect(
+              paragraph.getMaxIntrinsicHeight(paragraph.size.width),
+              lessThanOrEqualTo(paragraph.size.height + .01),
+            );
+            final actionBounds = tester.getRect(start);
+            expect(start.hitTestable(), findsOneWidget);
+            expect(actionBounds.top, greaterThanOrEqualTo(0));
+            expect(actionBounds.bottom, lessThanOrEqualTo(size.height));
+            expect(actionBounds.height, greaterThanOrEqualTo(48));
+            final finalPage =
+                tester.widget<SpaceAction>(start).label == "Let's fly";
+            expect(
+              tester.widget<SpaceAction>(start).label,
+              finalPage ? "Let's fly" : 'Next',
+            );
+            now += const Duration(seconds: 10);
+            await tester.pump(const Duration(milliseconds: 250));
+            expect(
+              tester
+                  .widget<LaunchCountdown>(find.byType(LaunchCountdown))
+                  .remaining,
+              const Duration(seconds: 30),
+              reason:
+                  'Reading every instruction keeps the launch clock paused.',
+            );
+            await tester.tap(start);
+            await tester.pump();
+            expect(game.onboardingSeen, finalPage);
+            expect(
+              find.byType(MissionBriefing),
+              finalPage ? findsNothing : findsOneWidget,
+            );
+            expect(tester.takeException(), isNull);
+          }
+          expect(
+            chunks.join('').replaceAll(RegExp(r'\s'), ''),
+            firstFlightBriefing
+                .map((beat) => beat.text)
+                .join('')
+                .replaceAll(RegExp(r'\s'), ''),
+            reason: 'Pagination must show every complete flight instruction.',
+          );
+        }
         expect(find.byType(MissionBriefing), findsNothing);
         expect(game.onboardingSeen, isTrue);
         expect(

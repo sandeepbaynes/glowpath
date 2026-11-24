@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' show DisplayFeatureState, DisplayFeatureType;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -30,6 +29,7 @@ import 'ui/rewards_panel.dart';
 import 'ui/design.dart';
 import 'ui/daily_reset.dart';
 import 'ui/flight_failure.dart';
+import 'ui/fold_layout.dart';
 import 'ui/launch_countdown.dart';
 import 'ui/launch_pressure.dart';
 import 'ui/launch_splash.dart';
@@ -123,6 +123,7 @@ class _GameScreenState extends State<GameScreen>
   AnimationController? _sheetMotion;
   final FlightLeague _league = FlightLeague();
   final FlightSupport _support = FlightSupport();
+  final _briefingKey = GlobalKey(debugLabel: 'mission-briefing');
   bool _welcome = false;
   bool _stageBriefing = false;
   bool _planetFlight = false;
@@ -604,12 +605,18 @@ class _GameScreenState extends State<GameScreen>
     );
   }
 
+  FoldPaneLayout? get _activeFoldPanes =>
+      FoldPaneLayout.resolve(MediaQuery.of(context), _foldGeometry.value);
+
   @override
   Widget build(BuildContext context) => Scaffold(
     body: SceneTransition(
       reduceMotion: _reduced,
       child: !_game.ready
-          ? const LaunchSplash(key: ValueKey('launch-splash'))
+          ? LaunchSplash(
+              key: const ValueKey('launch-splash'),
+              panes: _activeFoldPanes,
+            )
           : Stack(
               key: const ValueKey('loaded-game'),
               fit: StackFit.expand,
@@ -625,7 +632,7 @@ class _GameScreenState extends State<GameScreen>
                         children: [
                           SceneTransition(
                             reduceMotion: _reduced,
-                            child: _showPlanets
+                            child: _showPlanets && _activeFoldPanes == null
                                 ? KeyedSubtree(
                                     key: ValueKey(
                                       'voyage-sky-${_game.mode.name}',
@@ -662,6 +669,7 @@ class _GameScreenState extends State<GameScreen>
                 if (_planetFlight)
                   PlanetFlight(
                     key: const ValueKey('planet-flight'),
+                    panes: _activeFoldPanes,
                     world: _world,
                     beats: _transitBriefing,
                     reduceMotion: _reduced,
@@ -685,6 +693,7 @@ class _GameScreenState extends State<GameScreen>
                         ? (_isChallenge
                               ? ChallengeRetryOverlay(
                                   key: const ValueKey('failed-flight'),
+                                  panes: _activeFoldPanes,
                                   stage: _challengeStage,
                                   stageCount: _challengeCount,
                                   onRetry: _retryFlight,
@@ -692,6 +701,7 @@ class _GameScreenState extends State<GameScreen>
                                 )
                               : FlightFailureOverlay(
                                   key: const ValueKey('failed-flight'),
+                                  panes: _activeFoldPanes,
                                   trailColor: _trailColor,
                                   onRetry: _retryFlight,
                                   reduceMotion: _reduced,
@@ -711,41 +721,20 @@ class _GameScreenState extends State<GameScreen>
     if (!_showPlanets && !_challengeComplete && outer != null) {
       return _closedFoldFlight(camera: outer.camera, statusArea: outer.status);
     }
-    Rect? horizontal = geometry.horizontalLayoutDivision(size);
-    Rect? vertical = geometry.verticalLayoutDivision(size);
-    var expanded = geometry.status == HingePosture.fullyOpen;
-    // Android already reports fold/hinge geometry through Flutter. iOS uses
-    // its public reserved-region bridge, never an assumed screen midpoint.
-    for (final feature in MediaQuery.of(context).displayFeatures) {
-      if (feature.type != DisplayFeatureType.fold &&
-          feature.type != DisplayFeatureType.hinge) {
-        continue;
-      }
-      final region = feature.bounds;
-      if (region.width > region.height &&
-          region.left <= 1 &&
-          region.right >= size.width - 1 &&
-          region.top > 0 &&
-          region.bottom < size.height) {
-        horizontal ??= region;
-        expanded = feature.state == DisplayFeatureState.postureFlat;
-      } else if (region.height > region.width &&
-          region.top <= 1 &&
-          region.bottom >= size.height - 1 &&
-          region.left > 0 &&
-          region.right < size.width) {
-        vertical ??= region;
-        expanded = feature.state == DisplayFeatureState.postureFlat;
-      }
+    final activePanes = _activeFoldPanes;
+    if (activePanes != null && _showPlanets) {
+      return _foldHome(activePanes);
     }
-    if (!_showPlanets &&
-        !_challengeComplete &&
-        (horizontal != null || vertical != null)) {
-      return _foldFlight(
-        horizontal ?? vertical!,
-        horizontal: horizontal != null,
-        expanded: expanded,
-      );
+    if (activePanes != null && _challengeComplete) {
+      return _challengeResult(panes: activePanes);
+    }
+    final anchoredPanes = FoldPaneLayout.resolve(
+      MediaQuery.of(context),
+      geometry,
+      includeInactive: true,
+    );
+    if (!_showPlanets && !_challengeComplete && anchoredPanes != null) {
+      return _foldFlight(anchoredPanes);
     }
     return SafeArea(
       child: _foregroundFrame(
@@ -890,46 +879,13 @@ class _GameScreenState extends State<GameScreen>
     );
   }
 
-  Widget _foldFlight(
-    Rect division, {
-    required bool horizontal,
-    required bool expanded,
-  }) {
+  Widget _foldFlight(FoldPaneLayout panes) {
     final media = MediaQuery.of(context);
-    final size = media.size;
-    final safe = Rect.fromLTRB(
-      media.padding.left,
-      media.padding.top,
-      size.width - media.padding.right,
-      size.height - media.padding.bottom,
-    );
-    // Keep the same breathing room when the physical crease becomes inactive
-    // (zero thickness). The puzzle never recentres or switches sides on open.
-    final halfGap =
-        math.max(40.0, horizontal ? division.height : division.width) / 2 + 8;
-    final gap = horizontal
-        ? Rect.fromLTRB(
-            safe.left,
-            division.center.dy - halfGap,
-            safe.right,
-            division.center.dy + halfGap,
-          )
-        : Rect.fromLTRB(
-            division.center.dx - halfGap,
-            safe.top,
-            division.center.dx + halfGap,
-            safe.bottom,
-          );
-    final missionFrame = horizontal
-        ? Rect.fromLTRB(safe.left, safe.top, safe.right, gap.top)
-        : Rect.fromLTRB(safe.left, safe.top, gap.left, safe.bottom);
-    final playFrame = horizontal
-        ? Rect.fromLTRB(safe.left, gap.bottom, safe.right, safe.bottom)
-        : Rect.fromLTRB(gap.right, safe.top, safe.right, safe.bottom);
-    // The system's corner status area can extend beyond safeAreaInsets when
-    // the device rotates. Keep each pane outside its actual reserved frame.
-    final mission = _unobscuredFoldPane(missionFrame, size);
-    final play = _unobscuredFoldPane(playFrame, size);
+    final horizontal = panes.horizontal;
+    final expanded = panes.expanded;
+    final mission = panes.missionRect;
+    final play = panes.actionRect;
+    final gap = panes.gap;
     final toolsAbove = horizontal && play.width < 620 && play.height < 420;
     return MediaQuery(
       data: media.copyWith(
@@ -966,23 +922,6 @@ class _GameScreenState extends State<GameScreen>
         ],
       ),
     );
-  }
-
-  Rect _unobscuredFoldPane(Rect pane, Size viewport) {
-    final geometry = _foldGeometry.value;
-    if (!geometry.matchesViewport(viewport)) return pane;
-    for (final occlusion in geometry.occlusions) {
-      if (!pane.overlaps(occlusion)) continue;
-      final blocked = occlusion.inflate(8).intersect(pane);
-      final candidates = [
-        Rect.fromLTRB(pane.left, pane.top, blocked.left, pane.bottom),
-        Rect.fromLTRB(blocked.right, pane.top, pane.right, pane.bottom),
-        Rect.fromLTRB(pane.left, pane.top, pane.right, blocked.top),
-        Rect.fromLTRB(pane.left, blocked.bottom, pane.right, pane.bottom),
-      ]..sort((a, b) => (b.width * b.height).compareTo(a.width * a.height));
-      pane = candidates.first;
-    }
-    return pane;
   }
 
   Widget _foldMissionPane({
@@ -1642,7 +1581,7 @@ class _GameScreenState extends State<GameScreen>
       ? _game.nextChallengeLevel
       : _game.puzzle.levelNumber + 1;
 
-  Widget _voyageScene() => Stack(
+  Widget _voyageScene({double? verticalFocus}) => Stack(
     fit: StackFit.expand,
     children: [
       VoyageExplorer(
@@ -1655,9 +1594,11 @@ class _GameScreenState extends State<GameScreen>
         trailColor: _trailColor,
         ambientMotion: widget.ambientMotion,
         verticalFocus:
-            MediaQuery.sizeOf(context).width > MediaQuery.sizeOf(context).height
-            ? .22
-            : .38,
+            verticalFocus ??
+            (MediaQuery.sizeOf(context).width >
+                    MediaQuery.sizeOf(context).height
+                ? .22
+                : .38),
         reduceMotion: _reduced,
         arrivalDuration: const Duration(milliseconds: 2600),
         arrivalCurve: Curves.easeInOutCubic,
@@ -1683,7 +1624,123 @@ class _GameScreenState extends State<GameScreen>
     ],
   );
 
-  Widget _nextStopHud() {
+  Widget _pane(Rect rect, String key, Widget child) => Positioned.fromRect(
+    rect: rect,
+    child: ClipRect(
+      key: ValueKey(key),
+      child: MediaQuery(
+        data: FoldPaneLayout.paneMediaQuery(MediaQuery.of(context), rect),
+        child: child,
+      ),
+    ),
+  );
+
+  Widget _foldHome(FoldPaneLayout panes) => Stack(
+    children: [
+      _pane(
+        panes.missionRect,
+        'fold-home-map',
+        Stack(
+          fit: StackFit.expand,
+          children: [
+            _voyageScene(verticalFocus: .47),
+            Positioned(
+              left: 20,
+              top: 14,
+              right: 20,
+              child: IgnorePointer(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _game.status.solved ? 'SIGNAL DELIVERED' : 'YOUR VOYAGE',
+                      style: const TextStyle(
+                        color: Palette.secondary,
+                        fontSize: 11,
+                        letterSpacing: 1.8,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _game.status.solved
+                          ? '+${_game.lastReward?.score ?? _game.puzzle.scoreForMoves(_game.moves)} points'
+                          : VoyageWorld.forLevel(_nextLevel).galaxyName,
+                      style: bookTitle(22),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      _pane(
+        panes.actionRect,
+        'fold-home-actions',
+        Column(
+          children: [
+            Expanded(child: _nextStopHud(pane: true)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+              child: _navigationDock(),
+            ),
+          ],
+        ),
+      ),
+      Positioned.fromRect(
+        rect: panes.gap,
+        child: const IgnorePointer(
+          child: SizedBox(key: ValueKey('fold-home-gap')),
+        ),
+      ),
+    ],
+  );
+
+  Widget _panelCompanion(String title) => IgnorePointer(
+    child: ExcludeSemantics(
+      child: Material(
+        color: Palette.paper,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _foldMap(expanded: false, verticalFocus: .48),
+            Positioned(
+              left: 20,
+              right: 20,
+              top: 18,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'VOYAGE PAUSED',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      letterSpacing: 1.8,
+                      color: Palette.secondary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(_world.name, style: bookTitle(24)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Route ${_game.puzzle.levelNumber}',
+                    style: const TextStyle(
+                      color: Palette.secondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _nextStopHud({bool pane = false}) {
     final nextWorld = VoyageWorld.forLevel(_nextLevel);
     final challengeName = _game.isWeekly ? 'Weekly' : 'Daily';
     final destination = _isChallenge && !_challengeComplete
@@ -1829,7 +1886,9 @@ class _GameScreenState extends State<GameScreen>
             child: Center(
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: _contentWidth),
-                child: compact
+                child: pane
+                    ? Center(child: onward)
+                    : compact
                     ? Row(
                         key: const ValueKey('completion'),
                         children: [
@@ -1867,10 +1926,11 @@ class _GameScreenState extends State<GameScreen>
     );
   }
 
-  Widget _challengeResult() {
+  Widget _challengeResult({FoldPaneLayout? panes}) {
     final run = _game.challengeRunSummary!;
     return ChallengeResult(
       key: const ValueKey('challenge-complete'),
+      panes: panes,
       weekly: _game.isWeekly,
       stageCount: _challengeCount,
       points: run.totalScore,
@@ -2180,63 +2240,69 @@ class _GameScreenState extends State<GameScreen>
     ];
   }
 
-  Widget _briefingOverlay() => ColoredBox(
-    color: Palette.paper.withValues(alpha: .97),
-    child: SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560, maxHeight: 600),
-            child: MissionBriefing(
-              key: const ValueKey('mission-briefing'),
-              destination: _welcome
-                  ? 'Your first flight'
-                  : _isChallenge
-                  ? '$_challengeTitle briefing'
-                  : _world.name,
-              planet: VoyageProgression.forLevel(_game.puzzle.levelNumber)
-                  .planetIndex,
-              beats: _welcome
-                  ? firstFlightBriefing
-                  : _newRules.isEmpty
-                  ? mechanicBriefingFor(_game.puzzle)
-                  : [
-                      for (final rule in _newRules.take(3))
-                        MissionBriefingBeat(
-                          text: '${rule.title}. ${rule.text}',
-                          compactText: rule.compactText,
-                          icon: rule.icon,
-                          routeKind: rule.routeKind,
-                        ),
-                    ],
-              actionLabel: !_welcome && _newRules.length > 3
-                  ? 'Next briefing'
-                  : "Let's fly",
-              reduceMotion: _reduced,
-              onStart: () {
-                final welcome = _welcome;
-                final explained = _newRules
-                    .take(3)
-                    .map((rule) => rule.title)
-                    .toList();
-                setState(() {
-                  _welcome = false;
-                  _stageBriefing = false;
-                });
-                if (welcome) {
-                  _game.markOnboardingSeen();
-                } else {
-                  _game.introduceRules(explained);
-                }
-                _syncClock();
-              },
+  Widget _briefingOverlay() {
+    final panes = _activeFoldPanes;
+    final briefing = MissionBriefing(
+      key: _briefingKey,
+      panes: panes,
+      destination: _welcome
+          ? 'Your first flight'
+          : _isChallenge
+          ? '$_challengeTitle briefing'
+          : _world.name,
+      planet: VoyageProgression.forLevel(_game.puzzle.levelNumber).planetIndex,
+      beats: _welcome
+          ? firstFlightBriefing
+          : _newRules.isEmpty
+          ? mechanicBriefingFor(_game.puzzle)
+          : [
+              for (final rule in _newRules.take(3))
+                MissionBriefingBeat(
+                  text: '${rule.title}. ${rule.text}',
+                  compactText: rule.compactText,
+                  icon: rule.icon,
+                  routeKind: rule.routeKind,
+                ),
+            ],
+      actionLabel: !_welcome && _newRules.length > 3
+          ? 'Next briefing'
+          : "Let's fly",
+      reduceMotion: _reduced,
+      onStart: () {
+        final welcome = _welcome;
+        final explained = _newRules.take(3).map((rule) => rule.title).toList();
+        setState(() {
+          _welcome = false;
+          _stageBriefing = false;
+        });
+        if (welcome) {
+          _game.markOnboardingSeen();
+        } else {
+          _game.introduceRules(explained);
+        }
+        _syncClock();
+      },
+    );
+    return ColoredBox(
+      color: Palette.paper.withValues(alpha: .97),
+      child: panes != null
+          ? briefing
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: 560,
+                      maxHeight: 600,
+                    ),
+                    child: briefing,
+                  ),
+                ),
+              ),
             ),
-          ),
-        ),
-      ),
-    ),
-  );
+    );
+  }
 
   void _submitLeagueResult() {
     if (!_league.joined ||
@@ -2363,6 +2429,8 @@ class _GameScreenState extends State<GameScreen>
       motion: motion,
       fit: fit,
       preferredDesktopHeight: preferredDesktopHeight,
+      foldGeometry: _foldGeometry,
+      foldCompanionBuilder: (context) => _panelCompanion(title),
     );
     if (motion.status != AnimationStatus.dismissed) {
       final dismissed = Completer<void>();
@@ -2460,108 +2528,61 @@ class _GameScreenState extends State<GameScreen>
     _panelDepth++;
     _syncClock();
     setState(() {});
-    final restart = await showGeneralDialog<bool>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Keep playing',
-      barrierColor: Colors.black54,
-      transitionDuration: _reduced
-          ? Duration.zero
-          : const Duration(milliseconds: 260),
-      transitionBuilder: (context, animation, secondary, child) {
-        final eased = animation.drive(CurveTween(curve: Curves.easeInOutCubic));
-        return FadeTransition(
-          opacity: eased,
-          child: ScaleTransition(
-            scale: eased.drive(Tween(begin: .97, end: 1.0)),
-            child: child,
-          ),
-        );
-      },
-      pageBuilder: (context, animation, secondary) {
-        final compact = MediaQuery.textScalerOf(context).scale(1) > 1.5;
-        final viewport = MediaQuery.sizeOf(context);
-        final sideBySide = viewport.width >= 640 && viewport.height < 500;
-        final summary = Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              compact ? 'Restart?' : 'Restart route?',
-              style: bookTitle(compact ? (sideBySide ? 14 : 18) : 26),
+    final restart = await Navigator.of(context).push(
+      FoldDialogRoute<bool>(
+        barrierDismissible: true,
+        barrierLabel: 'Keep playing',
+        barrierColor: Colors.black54,
+        transitionDuration: _reduced
+            ? Duration.zero
+            : const Duration(milliseconds: 260),
+        transitionBuilder: (context, animation, secondary, child) {
+          final eased = animation.drive(
+            CurveTween(curve: Curves.easeInOutCubic),
+          );
+          return FadeTransition(
+            opacity: eased,
+            child: ScaleTransition(
+              scale: eased.drive(Tween(begin: .97, end: 1.0)),
+              child: child,
             ),
-            const SizedBox(height: 12),
-            Text(
-              compact
-                  ? 'Turns & hints reset. Voyage saved.'
-                  : 'Turns and hints reset. Your voyage stays saved.',
-              style: TextStyle(
-                color: Palette.secondary,
-                fontSize: compact ? (sideBySide ? 11 : 12) : 15,
-                height: 1.4,
-              ),
-            ),
-          ],
-        );
-        final actions = Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SpaceAction(
-              key: const ValueKey('confirm-restart'),
-              onPressed: () => Navigator.pop(context, true),
-              icon: Icons.refresh_rounded,
-              label: 'Restart',
-              compact: compact,
-              reduceMotion: _reduced,
-            ),
-            const SizedBox(height: 8),
-            SpaceAction(
-              key: const ValueKey('cancel-restart'),
-              onPressed: () => Navigator.pop(context, false),
-              label: compact ? 'Cancel' : 'Keep playing',
-              quiet: true,
-              compact: true,
-              reduceMotion: _reduced,
-            ),
-          ],
-        );
-        return Dialog(
-          key: const ValueKey('restart-dialog'),
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(20),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: sideBySide ? 720 : 440),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: Palette.board,
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: Palette.line, width: .8),
-              ),
-              child: Padding(
-                padding: EdgeInsets.all(sideBySide ? 20 : 24),
-                child: sideBySide
-                    ? Row(
-                        children: [
-                          Expanded(child: summary),
-                          const SizedBox(width: 24),
-                          Expanded(child: actions),
-                        ],
-                      )
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          summary,
-                          const SizedBox(height: 24),
-                          actions,
-                        ],
+          );
+        },
+        pageBuilder: (context, animation, secondary) =>
+            ValueListenableBuilder<FoldGeometry>(
+              valueListenable: _foldGeometry,
+              builder: (context, geometry, _) {
+                final media = MediaQuery.of(context);
+                final panes = FoldPaneLayout.resolve(media, geometry);
+                if (panes == null) return _restartDialog(context);
+                Widget pane(Rect rect, String key, WidgetBuilder builder) =>
+                    Positioned.fromRect(
+                      rect: rect,
+                      child: ClipRect(
+                        key: ValueKey(key),
+                        child: MediaQuery(
+                          data: FoldPaneLayout.paneMediaQuery(media, rect),
+                          child: Builder(builder: builder),
+                        ),
                       ),
-              ),
+                    );
+                return Stack(
+                  children: [
+                    pane(
+                      panes.missionRect,
+                      'fold-restart-companion',
+                      (_) => _panelCompanion('RESTART ROUTE'),
+                    ),
+                    pane(
+                      panes.actionRect,
+                      'fold-restart-actions',
+                      _restartDialog,
+                    ),
+                  ],
+                );
+              },
             ),
-          ),
-        );
-      },
+      ),
     );
     _panelDepth--;
     if (!mounted) return;
@@ -2571,6 +2592,87 @@ class _GameScreenState extends State<GameScreen>
       _act(_game.restart);
     }
     _syncClock();
+  }
+
+  Widget _restartDialog(BuildContext context) {
+    final compact = MediaQuery.textScalerOf(context).scale(1) > 1.5;
+    final viewport = MediaQuery.sizeOf(context);
+    final sideBySide = viewport.width >= 640 && viewport.height < 500;
+    final summary = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          compact ? 'Restart?' : 'Restart route?',
+          style: bookTitle(compact ? (sideBySide ? 14 : 18) : 26),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          compact
+              ? 'Turns & hints reset. Voyage saved.'
+              : 'Turns and hints reset. Your voyage stays saved.',
+          style: TextStyle(
+            color: Palette.secondary,
+            fontSize: compact ? (sideBySide ? 11 : 12) : 15,
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+    final actions = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SpaceAction(
+          key: const ValueKey('confirm-restart'),
+          onPressed: () => Navigator.pop(context, true),
+          icon: Icons.refresh_rounded,
+          label: 'Restart',
+          compact: compact,
+          reduceMotion: _reduced,
+        ),
+        const SizedBox(height: 8),
+        SpaceAction(
+          key: const ValueKey('cancel-restart'),
+          onPressed: () => Navigator.pop(context, false),
+          label: compact ? 'Cancel' : 'Keep playing',
+          quiet: true,
+          compact: true,
+          reduceMotion: _reduced,
+        ),
+      ],
+    );
+    return Dialog(
+      key: const ValueKey('restart-dialog'),
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(20),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: sideBySide ? 720 : 440),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Palette.board,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Palette.line, width: .8),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(sideBySide ? 20 : 24),
+            child: sideBySide
+                ? Row(
+                    children: [
+                      Expanded(child: summary),
+                      const SizedBox(width: 24),
+                      Expanded(child: actions),
+                    ],
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [summary, const SizedBox(height: 24), actions],
+                  ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _settings() => _sheet(
@@ -2594,10 +2696,17 @@ class _GameScreenState extends State<GameScreen>
         Navigator.pop(sheetContext);
         _rewards();
       },
-      onLicenses: () => showLicensePage(
-        context: sheetContext,
-        applicationName: 'Glowpath',
-        applicationVersion: '0.11.0',
+      onLicenses: () => _sheet(
+        'CREDITS & LICENSES',
+        (context) => Navigator(
+          onGenerateRoute: (_) => MaterialPageRoute<void>(
+            builder: (_) => const LicensePage(
+              applicationName: 'Glowpath',
+              applicationVersion: '0.11.2',
+            ),
+          ),
+        ),
+        fit: true,
       ),
     ),
     fit: true,
