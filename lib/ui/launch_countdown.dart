@@ -36,6 +36,10 @@ class LaunchCountdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final motionReduced =
+        reducedMotion ||
+        MediaQuery.disableAnimationsOf(context) ||
+        MediaQuery.reduceMotionOf(context);
     final seconds = math.max(0, (remaining.inMilliseconds / 1000).ceil());
     final fraction = total.inMilliseconds <= 0
         ? 0.0
@@ -68,10 +72,7 @@ class LaunchCountdown extends StatelessWidget {
         warm: warm,
         spoken: spoken,
         trailColor: trailColor,
-        reducedMotion:
-            reducedMotion ||
-            MediaQuery.disableAnimationsOf(context) ||
-            MediaQuery.reduceMotionOf(context),
+        reducedMotion: motionReduced,
         urgent: urgent,
         expired: expired,
         complete: complete,
@@ -93,10 +94,7 @@ class LaunchCountdown extends StatelessWidget {
             ? 'Paused'
             : 'Auto launch',
         trailColor: trailColor,
-        reducedMotion:
-            reducedMotion ||
-            MediaQuery.disableAnimationsOf(context) ||
-            MediaQuery.reduceMotionOf(context),
+        reducedMotion: motionReduced,
         urgent: urgent,
         expired: expired,
         complete: complete,
@@ -105,21 +103,17 @@ class LaunchCountdown extends StatelessWidget {
       );
     }
     final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.6;
-    final rocket = SizedBox(
-      width: compact ? 34 : 58,
-      height: compact ? 30 : 54,
-      child: RepaintBoundary(
-        key: const ValueKey('countdown-rocket'),
-        child: CustomPaint(
-          painter: CountdownRocketPainter(
-            heat: paused ? warm * .3 : warm,
-            trailColor: trailColor,
-            urgent: urgent || complete || expired,
-            reducedMotion: reducedMotion,
-            complete: complete,
-          ),
-        ),
-      ),
+    final flight = _HorizontalFlightRail(
+      fraction: fraction,
+      warm: warm,
+      color: color,
+      trailColor: trailColor,
+      reducedMotion: motionReduced,
+      urgent: urgent,
+      expired: expired,
+      complete: complete,
+      paused: paused,
+      craftWidth: compact ? 34 : 58,
     );
     final readout = Text(
       complete ? '✓' : '${seconds}s',
@@ -131,11 +125,6 @@ class LaunchCountdown extends StatelessWidget {
         fontWeight: FontWeight.w600,
         fontFeatures: const [FontFeature.tabularFigures()],
       ),
-    );
-    final rail = CustomPaint(
-      key: const ValueKey('launch-time-rail'),
-      size: Size(double.infinity, compact ? 4 : 10),
-      painter: _TimeRailPainter(fraction: fraction, color: color),
     );
     final label = Text(
       caption,
@@ -162,20 +151,21 @@ class LaunchCountdown extends StatelessWidget {
                 ),
                 child: SizedBox(
                   height: 48,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  child: Row(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [rocket, readout],
-                      ),
-                      Row(
-                        children: [
-                          label,
-                          const SizedBox(width: 6),
-                          Expanded(child: rail),
-                        ],
+                      Expanded(child: flight),
+                      const SizedBox(width: 6),
+                      SizedBox(
+                        width: 54,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            FittedBox(fit: BoxFit.scaleDown, child: label),
+                            const SizedBox(height: 3),
+                            FittedBox(fit: BoxFit.scaleDown, child: readout),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -186,37 +176,32 @@ class LaunchCountdown extends StatelessWidget {
                 child: largeText
                     ? Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Row(
-                            children: [
-                              rocket,
-                              const SizedBox(width: 8),
-                              Expanded(child: label),
-                            ],
-                          ),
+                          label,
                           const SizedBox(height: 4),
                           readout,
                           const SizedBox(height: 8),
-                          rail,
+                          SizedBox(height: 54, child: flight),
                         ],
                       )
                     : Row(
                         children: [
-                          rocket,
-                          const SizedBox(width: 9),
-                          Expanded(
+                          Expanded(child: SizedBox(height: 54, child: flight)),
+                          const SizedBox(width: 14),
+                          SizedBox(
+                            width:
+                                92 * MediaQuery.textScalerOf(context).scale(1),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 label,
-                                const SizedBox(height: 6),
-                                rail,
+                                const SizedBox(height: 3),
+                                readout,
                               ],
                             ),
                           ),
-                          const SizedBox(width: 14),
-                          readout,
                         ],
                       ),
               ),
@@ -548,111 +533,81 @@ class _ProminentCountdown extends StatelessWidget {
           ),
           child: SizedBox(
             height: height,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Row(
               children: [
                 Expanded(
-                  child: Row(
+                  child: _HorizontalFlightRail(
+                    fraction: fraction,
+                    warm: warm,
+                    color: color,
+                    trailColor: trailColor,
+                    reducedMotion: reducedMotion,
+                    urgent: urgent,
+                    expired: expired,
+                    complete: complete,
+                    paused: paused,
+                    craftWidth: dense ? 52 : 64,
+                    pulse: pulse,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: dense ? 100 : 116,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      SizedBox(
-                        width: dense ? 74 : 92,
-                        height: dense ? 48 : 60,
-                        child: Padding(
-                          padding: const EdgeInsets.all(3),
-                          child: TweenAnimationBuilder<double>(
-                            tween: Tween(end: pulse),
-                            duration:
-                                reducedMotion || paused || complete || expired
-                                ? Duration.zero
-                                : const Duration(milliseconds: 180),
-                            curve: Curves.easeOutCubic,
-                            builder: (context, value, child) => Transform.scale(
-                              key: const ValueKey('launch-pressure-pulse'),
-                              scale: value,
-                              child: child,
-                            ),
-                            child: RepaintBoundary(
-                              key: const ValueKey('countdown-rocket'),
-                              child: CustomPaint(
-                                painter: CountdownRocketPainter(
-                                  heat: paused ? warm * .3 : warm,
-                                  trailColor: trailColor,
-                                  urgent: urgent || complete || expired,
-                                  reducedMotion: reducedMotion,
-                                  complete: complete,
-                                ),
-                              ),
-                            ),
-                          ),
+                      Text(
+                        caption.toUpperCase(),
+                        style: TextStyle(
+                          color: pressure > .3 ? color : Palette.secondary,
+                          fontSize: 10,
+                          height: 1,
+                          letterSpacing: 1.2,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              caption.toUpperCase(),
-                              style: TextStyle(
-                                color: pressure > .3
-                                    ? color
-                                    : Palette.secondary,
-                                fontSize: 10,
-                                height: 1,
-                                letterSpacing: 1.2,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerRight,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.baseline,
-                                textBaseline: TextBaseline.alphabetic,
-                                children: [
-                                  if (!complete) ...[
-                                    Text(
-                                      'T−',
-                                      style: TextStyle(
-                                        color: color,
-                                        fontSize: dense ? 17 : 20,
-                                        height: 1,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 7),
-                                  ],
-                                  Text(
-                                    complete ? '✓' : '${seconds}s',
-                                    key: const ValueKey('launch-seconds'),
-                                    style: TextStyle(
-                                      color: color,
-                                      fontSize: dense ? 32 : 40,
-                                      height: 1,
-                                      fontWeight: FontWeight.w500,
-                                      fontFeatures: const [
-                                        FontFeature.tabularFigures(),
-                                      ],
-                                    ),
+                      SizedBox(
+                        height: dense ? 40 : 50,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.topRight,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
+                            children: [
+                              if (!complete) ...[
+                                Text(
+                                  'T−',
+                                  style: TextStyle(
+                                    color: color,
+                                    fontSize: dense ? 17 : 20,
+                                    height: 1,
                                   ),
-                                ],
+                                ),
+                                const SizedBox(width: 7),
+                              ],
+                              Text(
+                                complete ? '✓' : '${seconds}s',
+                                key: const ValueKey('launch-seconds'),
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: dense ? 32 : 40,
+                                  height: 1,
+                                  fontWeight: FontWeight.w500,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                SizedBox(
-                  height: 8,
-                  child: CustomPaint(
-                    key: const ValueKey('launch-time-rail'),
-                    painter: _TimeRailPainter(fraction: fraction, color: color),
-                  ),
-                ),
-                const SizedBox(height: 2),
               ],
             ),
           ),
@@ -660,6 +615,105 @@ class _ProminentCountdown extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The fold's ascent rail turned sideways: the rocket is the moving marker,
+/// with completed travel behind it. Interpolation follows owner clock updates
+/// and settles between 200ms clock updates; paused and reduced-motion updates
+/// settle immediately.
+class _HorizontalFlightRail extends StatelessWidget {
+  const _HorizontalFlightRail({
+    required this.fraction,
+    required this.warm,
+    required this.color,
+    required this.trailColor,
+    required this.reducedMotion,
+    required this.urgent,
+    required this.expired,
+    required this.complete,
+    required this.paused,
+    required this.craftWidth,
+    this.pulse = 1,
+  });
+
+  final double fraction, warm, craftWidth, pulse;
+  final Color color, trailColor;
+  final bool reducedMotion, urgent, expired, complete, paused;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    key: const ValueKey('horizontal-launch-flight'),
+    builder: (context, bounds) {
+      // Leave space for the pressure pulse at both ends without changing the
+      // rail's bounds or the readout's position as the launch approaches.
+      final width = math.max(
+        0.0,
+        math.min(
+          craftWidth,
+          math.min(bounds.maxWidth - 6, (bounds.maxHeight - 6) * 58 / 54),
+        ),
+      );
+      final height = width * 54 / 58;
+      final left = width / 2 + 3;
+      final right = math.max(left, bounds.maxWidth - width / 2 - 3);
+      final still = reducedMotion || paused || expired || complete;
+      return TweenAnimationBuilder<double>(
+        tween: Tween(end: complete || expired ? 0 : fraction),
+        duration: still ? Duration.zero : const Duration(milliseconds: 90),
+        curve: Curves.linear,
+        builder: (context, value, child) {
+          final centerX = right - (right - left) * value;
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              RotatedBox(
+                key: const ValueKey('launch-time-rail'),
+                quarterTurns: 1,
+                child: CustomPaint(
+                  painter: _AscentRailPainter(
+                    fraction: value,
+                    color: color,
+                    top: bounds.maxWidth - right,
+                    bottom: bounds.maxWidth - left,
+                    showGlow: !reducedMotion && !paused,
+                  ),
+                ),
+              ),
+              Positioned(
+                left: centerX - width / 2,
+                top: (bounds.maxHeight - height) / 2,
+                width: width,
+                height: height,
+                child: child!,
+              ),
+            ],
+          );
+        },
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(end: pulse),
+          duration: still ? Duration.zero : const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          builder: (context, value, child) => Transform.scale(
+            key: const ValueKey('launch-pressure-pulse'),
+            scale: value,
+            child: child,
+          ),
+          child: RepaintBoundary(
+            key: const ValueKey('countdown-rocket'),
+            child: CustomPaint(
+              painter: CountdownRocketPainter(
+                heat: paused ? warm * .3 : warm,
+                trailColor: trailColor,
+                urgent: urgent || complete || expired,
+                reducedMotion: reducedMotion,
+                complete: complete,
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 /// Fixed silhouette with directional lighting. Heat changes exhaust length and
@@ -739,54 +793,4 @@ class CountdownRocketPainter extends CustomPainter {
       urgent != old.urgent ||
       reducedMotion != old.reducedMotion ||
       complete != old.complete;
-}
-
-class _TimeRailPainter extends CustomPainter {
-  const _TimeRailPainter({required this.fraction, required this.color});
-  final double fraction;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final y = size.height / 2;
-    canvas.drawLine(
-      Offset(0, y),
-      Offset(size.width, y),
-      Paint()
-        ..color = Palette.line
-        ..strokeWidth = 1
-        ..strokeCap = StrokeCap.round,
-    );
-    for (var tick = 0; tick <= 30; tick++) {
-      final x = size.width * tick / 30;
-      canvas.drawLine(
-        Offset(x, y - (tick % 5 == 0 ? 3 : 1.5)),
-        Offset(x, y + (tick % 5 == 0 ? 3 : 1.5)),
-        Paint()
-          ..color = Palette.secondary.withValues(
-            alpha: tick % 5 == 0 ? .35 : .15,
-          )
-          ..strokeWidth = .8,
-      );
-    }
-    if (fraction > 0) {
-      canvas.drawLine(
-        Offset(0, y),
-        Offset(size.width * fraction, y),
-        Paint()
-          ..color = color
-          ..strokeWidth = 2
-          ..strokeCap = StrokeCap.round,
-      );
-      canvas.drawCircle(
-        Offset(size.width * fraction, y),
-        2.5,
-        Paint()..color = color,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_TimeRailPainter old) =>
-      fraction != old.fraction || color != old.color;
 }

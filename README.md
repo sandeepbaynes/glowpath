@@ -27,7 +27,7 @@ Draw a route from **START**, collect three stars, and reach **FINISH** before th
 
 The current plan is free access on phones, tablets, foldables, the web and a future watch edition: no paid downloads, subscriptions, in-app purchases, paywalled levels or currency bought with money. Coins are earned through play. Ads remain off; phone and web advertising may help fund the game later.
 
-The planned watch edition will offer a complete, ad-free game that can be played on its own, with an optional, unobtrusive way to discover the phone app. Watch gameplay and earned-reward sync between watch and phone are not implemented yet.
+The planned watch edition will offer a complete, ad-free game that can be played on its own, with an optional, unobtrusive way to discover the phone app. An [experimental native watchOS preview](watch/README.md) includes a small routing board, timed flights, hints and local scores. It builds with the watchOS SDK; simulator playtesting is pending runtime installation. The full watch edition, phone discovery and earned-reward sync are not implemented yet.
 
 <p align="center">
   <img src="docs/showcase/gameplay.png" width="290" alt="Mobile puzzle with a launch countdown, START and FINISH markers, and a four-by-four routing board">
@@ -59,7 +59,7 @@ The project uses **Flutter and Dart**, with a small Swift bridge for iOS fold ge
 
 Procedural levels are deterministic and checked for legal solutions. Tests cover connected routes, coupled tiles, independent crossing lanes, portal transfers, replay validation, rewards and save migration. Layout checks exercise phones, tablets, fold postures, enlarged text and touch-target bounds. Reduced motion, semantic labels and keyboard controls are implemented; physical-device accessibility and performance review continue.
 
-**0.11.3 validation:** 885 Flutter tests pass, with clean static analysis. Fold review includes the iPhone simulator and synthetic Android clamshell layouts; physical-device review continues. These checks establish behavior within the tested cases; player enjoyment is evaluated by playing the game. [Read the verification notes](docs/release/0.11.3.md).
+**0.11.4 validation:** 905 Flutter tests pass, with clean static analysis. Fold review includes the iPhone simulator and synthetic Android clamshell layouts; physical-device review continues. These checks establish behavior within the tested cases; player enjoyment is evaluated by playing the game. [Read the verification notes](docs/release/0.11.4.md).
 
 ## Run it locally
 
@@ -107,6 +107,8 @@ The package contains self-hosted fonts and renderer files, a file inventory and 
 | [`backend/`](backend/) | An optional, undeployed leaderboard/replay-validation prototype |
 
 Useful reading: [interaction research](docs/design/RESEARCH_EVIDENCE_0_3.md), [visual direction](docs/design/ORBITAL_ART.md), [progression and rewards](docs/design/VOYAGE_REWARDS_0_8.md), and [playtesting](docs/PLAYTEST.md).
+
+The [ad and first-party measurement plan](docs/release/AD_AND_ANALYTICS_PLAN.md) records proposed placements and launch gates. The preview contains no live ads or event uploads.
 
 Feedback is welcome through [GitHub Issues](https://github.com/sandeepbaynes/glowpath/issues). Include your device/browser, steps to reproduce, and what you expected to happen.
 

@@ -15,6 +15,8 @@ import 'ui/challenge_result.dart';
 import 'ui/cutout_beacon.dart';
 import 'services/flight_league.dart';
 import 'services/flight_support.dart';
+import 'services/ad_pacing.dart';
+import 'services/game_analytics.dart';
 import 'services/fold_posture.dart';
 import 'ui/flight_league_panel.dart';
 import 'ui/flight_manual.dart';
@@ -123,6 +125,8 @@ class _GameScreenState extends State<GameScreen>
   AnimationController? _sheetMotion;
   final FlightLeague _league = FlightLeague();
   final FlightSupport _support = FlightSupport();
+  final GameAnalytics _analytics = GameAnalytics();
+  final AdPacing _adPacing = AdPacing();
   final _briefingKey = GlobalKey(debugLabel: 'mission-briefing');
   bool _welcome = false;
   bool _stageBriefing = false;
@@ -149,6 +153,14 @@ class _GameScreenState extends State<GameScreen>
   int _panelDepth = 0;
   bool get _panelOpen => _panelDepth > 0;
   bool _flightFailed = false;
+  void _track(String name, [Map<String, Object?> fields = const {}]) {
+    unawaited(_analytics.record(name, fields).catchError((Object _) {}));
+  }
+
+  Map<String, Object?> get _levelFields => {
+    'mode': _game.mode.name,
+    'level': _game.puzzle.levelNumber,
+  };
   bool _showNextStop = false;
   bool _voyageHome = false;
   bool get _showPlanets => !_isChallenge && (_voyageHome || _showNextStop);
@@ -246,6 +258,7 @@ class _GameScreenState extends State<GameScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _game = widget.controller ?? GameController();
+    _track('session_start');
     _foldGeometry = widget.foldGeometry ?? (_nativeFoldPosture = FoldPosture());
     _foldGeometry.addListener(_foldChanged);
     _voyageHome = widget.startOnVoyage && !_isChallenge;
@@ -368,6 +381,7 @@ class _GameScreenState extends State<GameScreen>
     }
     _syncClock();
     if (restoring) {
+      if (_game.ready && !solved) _track('level_start', _levelFields);
       // A tab restores its saved screen directly. Only a new solve earns the
       // board payoff and onward journey; returning to a mode never replays it.
       _animateOnward = false;
@@ -378,6 +392,21 @@ class _GameScreenState extends State<GameScreen>
         _scheduleChallengeAdvance();
       }
     } else if (solved && !_wasSolved) {
+      final fields = {
+        ..._levelFields,
+        'assisted': _game.assisted,
+        'timeBucket': _clock.elapsed.inSeconds ~/ 15,
+      };
+      _track('level_complete', fields);
+      _adPacing.recordPlay(_clock.elapsed);
+      if (_adPacing.completeLevel(
+        now: _monotonic.elapsed,
+        engaged: _game.puzzle.levelNumber > 3,
+        assisted: _game.assisted,
+        challenge: _isChallenge,
+      )) {
+        _track('ad_eligible', {'placement': 'voyage_result'});
+      }
       _submitLeagueResult();
       _animateOnward = true;
       _arrival.duration = Duration(
@@ -469,6 +498,10 @@ class _GameScreenState extends State<GameScreen>
     }
     if (_clock.expired && _canPlan && !_briefingOpen) {
       setState(() => _flightFailed = true);
+      _track('level_fail', {
+        ..._levelFields,
+        'timeBucket': _clock.elapsed.inSeconds ~/ 15,
+      });
       _game.cancelTrace();
     }
   }
@@ -497,6 +530,7 @@ class _GameScreenState extends State<GameScreen>
   void _retryFlight() {
     _sampleTiming();
     if (!_game.retryAfterTimeout()) return;
+    _track('level_retry', _levelFields);
     setState(() {
       _flightFailed = false;
       _hintIndex = null;
@@ -534,10 +568,10 @@ class _GameScreenState extends State<GameScreen>
     super.dispose();
   }
 
-  void _act(bool Function() action, {bool keepHint = false}) {
+  bool _act(bool Function() action, {bool keepHint = false}) {
     _sampleTiming();
     final wasSolved = _game.status.solved;
-    if (!action()) return;
+    if (!action()) return false;
     if (_game.haptics) {
       unawaited(
         !wasSolved && _game.status.solved
@@ -548,6 +582,7 @@ class _GameScreenState extends State<GameScreen>
     setState(() {
       if (!keepHint) _hintIndex = null;
     });
+    return true;
   }
 
   void _hint() {
@@ -555,14 +590,14 @@ class _GameScreenState extends State<GameScreen>
     if (!_canPlan) return;
     if (_hintIndex != null) {
       if (_game.hintCredits > 0) {
-        _act(_game.useHintCredit);
+        if (_act(_game.useHintCredit)) _track('hint_used', _levelFields);
         return;
       }
       if (!_support.consumeHint()) {
         _flightSupport(initialPage: 0);
         return;
       }
-      _act(_game.hint);
+      if (_act(_game.hint)) _track('hint_used', _levelFields);
     } else {
       final candidate = _game.suggestedHintIndex;
       if (candidate == null) return;
@@ -2386,6 +2421,7 @@ class _GameScreenState extends State<GameScreen>
       canSkip: !_isChallenge && !_game.isReplaying && !_game.status.solved,
       reduceMotion: _reduced,
       onSkip: () {
+        final skippedLevel = _levelFields;
         Navigator.pop(sheetContext);
         final planet = VoyageProgression.forLevel(_game.puzzle.levelNumber)
             .planetIndex;
@@ -2397,7 +2433,7 @@ class _GameScreenState extends State<GameScreen>
           _stageBriefing = false;
           _planetFlight = true;
         }
-        _act(_game.skipCurrentLevel);
+        if (_act(_game.skipCurrentLevel)) _track('level_skip', skippedLevel);
         if (crossesPlanet) _syncClock();
       },
     ),

@@ -49,6 +49,7 @@ app.*.map.json
 
 # Local service state and secrets
 backend/node_modules/
+tools/cloudflare/node_modules/
 backend/build/
 backend/*.sqlite*
 .env
