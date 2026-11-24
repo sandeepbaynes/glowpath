@@ -9,11 +9,13 @@ The same Mac can build the game and manage Cloudflare releases. A pinned Wrangle
 ```sh
 npm ci --prefix tools/cloudflare
 npm --prefix tools/cloudflare run login
-npm --prefix tools/cloudflare run whoami
+npm --prefix tools/cloudflare run profiles
 npm --prefix tools/cloudflare run projects
 ```
 
 Login creates an explicit named `glowpath` profile with account/profile read access and Pages write access. Its credentials are encrypted using a key in macOS Keychain. The scripts select that profile and keychain storage only for their own command; they do not replace Wrangler's default login, activate a directory binding, export global account variables, or modify shell startup files. Other projects keep their normal account selection. Review Cloudflare's authorization page before granting access. It does not request billing or DNS write permissions. Do not place credentials in this public repository.
+
+The named profile is authenticated on the development Mac and `npm --prefix tools/cloudflare run projects` succeeds. It currently lists only an unrelated Pages project; there is no Glowpath Pages project or deployment yet. `npm --prefix tools/cloudflare run profiles` verifies that `glowpath` has no bound directories.
 
 Build the verified upload directory with `python3 tools/package_web.py --target cloudflare --mode preview --base-href /`. Use `npm --prefix tools/cloudflare run wrangler -- pages deploy`, passing the generated directory as an absolute path and the intended `--project-name`. Wrangler uploads a directory, not the ZIP. If the login can access multiple accounts, set `CLOUDFLARE_ACCOUNT_ID` for that command to the intended account; do not export it globally. Create a Pages project only if it does not already exist; subsequent releases should update that project. Use these scoped npm commands instead of plain `wrangler login` or `wrangler logout`, which affect the default profile.
 

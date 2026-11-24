@@ -1,6 +1,6 @@
 # Ad and measurement plan
 
-Status: design, local pacing code and an on-device event journal wired to session, level, failure, retry, hint and skip transitions. No live ad units are connected and no player events are uploaded. The Google account's Glowpath iOS app record exists, but it still requires account/app review. AdMob web ads are a separate AdSense H5 Games integration.
+Status: design, local pacing code and an on-device event journal wired to session, level, failure, retry, hint and skip transitions. Eight AdMob units now exist under `sandeep.baynes@gmail.com`, but the shipped app still uses Google test IDs and ads remain disabled. No player events are uploaded. Both AdMob app records are unlisted and need store listing and AdMob review before normal serving. Web ads require a separate AdSense H5 Games integration.
 
 ## Native placements
 
@@ -13,7 +13,22 @@ Status: design, local pacing code and an on-device event journal wired to sessio
 
 The provider controls interstitial duration; the app cannot guarantee a 30-second creative. Do not call it a “30-second ad” in the UI. If an interstitial is unavailable, continue straight to Play. A watchOS edition remains ad free.
 
-`AdPacing` currently records eligibility; it is not connected to the ad provider yet. Its `recordImpression` must run only after `onAdShowedFullScreenContent`; no-fill and cancelled offers must not count. The current `FlightSupport` adapter already implements rewarded callback handling, but production app/unit IDs and consent configuration remain unset. Browser ads require an approved H5 Games account and a separate adapter.
+`AdPacing` currently records eligibility; it is not connected to the ad provider yet. Its `recordImpression` must run only after `onAdShowedFullScreenContent`; no-fill and cancelled offers must not count. The current `FlightSupport` adapter selects separate hint/skip rewarded units but defaults to Google's test IDs. Production app IDs, consent configuration, banners and interstitial presentation remain unset. Browser ads require an approved H5 Games account and a separate adapter.
+
+### AdMob unit inventory
+
+These are account identifiers, not active app configuration. Keep all preview builds on test ads until consent, store metadata, placement QA and policy review are complete.
+
+| Format / intended use | iOS unit | Android unit |
+| --- | --- | --- |
+| Banner / bottom safe-area slot | `ca-app-pub-3704137344359613/4093674041` | `ca-app-pub-3704137344359613/6263581357` |
+| Interstitial / Voyage level break | `ca-app-pub-3704137344359613/1248018851` | `ca-app-pub-3704137344359613/6200962639` |
+| Rewarded / three hints | `ca-app-pub-3704137344359613/6392534329` | `ca-app-pub-3704137344359613/1917655581` |
+| Rewarded / one skip | `ca-app-pub-3704137344359613/5079452654` | `ca-app-pub-3704137344359613/7884298139` |
+
+AdMob app IDs: iOS `ca-app-pub-3704137344359613~1566748905`; Android `ca-app-pub-3704137344359613~5449706481`. The Android record was created as an unlisted app. Verify both against their eventual store listings before enabling live ads.
+
+When the release gates pass, select the rewarded units via `IOS_HINT_REWARDED_AD`, `IOS_SKIP_REWARDED_AD`, `ANDROID_HINT_REWARDED_AD` and `ANDROID_SKIP_REWARDED_AD` build defines. Build previews without these defines and without `ENABLE_ADS`; that keeps Google test IDs and all ads off. The app ID metadata also needs to change from Google's sample IDs for a live release.
 
 ## First-party measurement
 
@@ -33,4 +48,4 @@ The server should accept only allowlisted event names and coarse fields, limit b
 
 Initial experiment: 10% ad-free holdout, 45% rewarded only, 45% rewarded plus paced interstitial. Keep banners separately randomized because an always-visible banner affects every screen. Require meaningful sample size and review both revenue and next-level-start/D1 retention before raising frequency. Pause a placement if accidental taps, complaints, or retention worsen materially.
 
-Store and policy checks before activation: finalize privacy policy/support URL and store data declarations; configure UMP messages and test consent states; create production ad units per platform; verify `app-ads.txt`; inspect device-safe banner positioning; test reward callback, no-fill, close, backgrounding, fold layouts and screen readers. Web H5 approval, `ads.txt` and its consent path are separate.
+Store and policy checks before activation: finalize privacy policy/support URL and store data declarations; configure UMP messages and test consent states; connect the existing production units behind a release flag; verify `app-ads.txt`; inspect device-safe banner positioning; test reward callback, no-fill, close, backgrounding, fold layouts and screen readers. Web H5 approval, `ads.txt` and its consent path are separate.

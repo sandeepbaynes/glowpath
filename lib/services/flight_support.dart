@@ -50,12 +50,20 @@ class FlightSupport extends ChangeNotifier {
   static const adsEnabled = bool.fromEnvironment('ENABLE_ADS');
   static const purchasesEnabled = false;
   static const productId = 'app.glowpath.remove_ads';
-  static const _iosReward = String.fromEnvironment(
-    'IOS_REWARDED_AD',
+  static const _iosHintReward = String.fromEnvironment(
+    'IOS_HINT_REWARDED_AD',
     defaultValue: 'ca-app-pub-3940256099942544/1712485313',
   );
-  static const _androidReward = String.fromEnvironment(
-    'ANDROID_REWARDED_AD',
+  static const _iosSkipReward = String.fromEnvironment(
+    'IOS_SKIP_REWARDED_AD',
+    defaultValue: 'ca-app-pub-3940256099942544/1712485313',
+  );
+  static const _androidHintReward = String.fromEnvironment(
+    'ANDROID_HINT_REWARDED_AD',
+    defaultValue: 'ca-app-pub-3940256099942544/5224354917',
+  );
+  static const _androidSkipReward = String.fromEnvironment(
+    'ANDROID_SKIP_REWARDED_AD',
     defaultValue: 'ca-app-pub-3940256099942544/5224354917',
   );
   bool _disposed = false, busy = false, adFree = false;
@@ -387,8 +395,8 @@ class FlightSupport extends ChangeNotifier {
       bool timedOut = false;
       await RewardedAd.load(
         adUnitId: defaultTargetPlatform == TargetPlatform.iOS
-            ? _iosReward
-            : _androidReward,
+            ? (skip ? _iosSkipReward : _iosHintReward)
+            : (skip ? _androidSkipReward : _androidHintReward),
         request: const AdRequest(nonPersonalizedAds: true),
         rewardedAdLoadCallback: RewardedAdLoadCallback(
           onAdLoaded: (ad) {

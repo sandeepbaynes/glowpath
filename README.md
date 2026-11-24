@@ -29,6 +29,22 @@ The current plan is free access on phones, tablets, foldables, the web and a fut
 
 The planned watch edition will offer a complete, ad-free game that can be played on its own, with an optional, unobtrusive way to discover the phone app. An [experimental native watchOS preview](watch/README.md) includes a small routing board, timed flights, hints and local scores. It builds with the watchOS SDK; simulator playtesting is pending runtime installation. The full watch edition, phone discovery and earned-reward sync are not implemented yet.
 
+### Designed for each device
+
+| Device | Interaction and layout decision | Status |
+| --- | --- | --- |
+| iPhone and Android phone | Finger-drawn routes; compact, safe-area-aware mission controls and launch clock. | Flutter game built; physical iPhone and Android 7.0/16 emulator launch review complete. |
+| iPad, Android tablet and desktop web | Keep the board a comfortable size; use the additional width for the mission panel and map. Mouse, keyboard and touch work on web. | Built; responsive review continues. |
+| Native macOS, Windows and Linux / Steam Deck | Keyboard, mouse or controller input at a restrained desktop scale; package and verify each operating system separately. | Flutter desktop targets are candidates; no desktop release package yet. |
+| Book-style foldable, closed | One-pane phone layout, including a vertical rocket countdown on narrow cover screens. | Adaptive Flutter layout built; simulator review continues. |
+| Book-style foldable, half or fully open | Keep the puzzle on one side while the other side carries map, timer and controls; avoid the hinge and animate posture changes. | Adaptive layout built; physical fold testing pending. |
+| Flip-style foldable | Give the two halves separate jobs when partly open; return to a single game surface when closed. The external cover display is a separate, unbuilt target. | Posture layouts built; physical flip testing pending. |
+| Apple Watch and Wear OS | A short, self-contained, ad-free routing game that can introduce the phone edition. | watchOS prototype only; Wear OS unbuilt. |
+| Apple TV and Android TV | D-pad/remote play, visible focus, couch-distance text and a longer clock to allow for remote input. | Planned; no TV build yet. |
+| Apple Vision Pro, Meta Quest, Android XR, PICO and supported PC VR headsets | A spatial puzzle in front of the player, with reach/pinch routing, grabbable planets, elastic spin/flick and a controller alternative. | [Platform and interaction plan](docs/platforms/DEVICE_STRATEGY.md); no XR build yet. |
+
+Flutter 3.50 supports **iOS 15+** and **Android API 24+**, which are the current mobile minimums for this codebase. An app store accepting older OS targets does not make those targets supported by this Flutter version. The native watch, TV and XR editions need their own builds and device testing. [Flutter platform support](https://docs.flutter.dev/reference/supported-platforms).
+
 <p align="center">
   <img src="docs/showcase/gameplay.png" width="290" alt="Mobile puzzle with a launch countdown, START and FINISH markers, and a four-by-four routing board">
   &nbsp;&nbsp;

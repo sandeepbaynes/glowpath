@@ -4,7 +4,7 @@
   "description": "Pinned Cloudflare deployment tools for the Glowpath web build",
   "scripts": {
     "login": "CLOUDFLARE_AUTH_USE_KEYRING=true wrangler auth create glowpath --scopes account:read user:read pages:write",
-    "whoami": "CLOUDFLARE_AUTH_USE_KEYRING=true wrangler whoami --profile glowpath",
+    "profiles": "CLOUDFLARE_AUTH_USE_KEYRING=true wrangler auth list",
     "projects": "CLOUDFLARE_AUTH_USE_KEYRING=true wrangler pages project list --profile glowpath",
     "wrangler": "CLOUDFLARE_AUTH_USE_KEYRING=true wrangler --profile glowpath"
   },
