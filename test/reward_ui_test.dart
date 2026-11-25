@@ -194,7 +194,15 @@ void main() {
             medalCopy,
             contains('2 daily medals and 1 weekly expedition medals'),
           );
-          expect(find.byType(Scrollable), findsNothing);
+          expect(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is Scrollable &&
+                  (widget.axisDirection == AxisDirection.down ||
+                      widget.axisDirection == AxisDirection.up),
+            ),
+            findsNothing,
+          );
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox.shrink());
           equipped.dispose();

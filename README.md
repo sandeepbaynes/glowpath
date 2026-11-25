@@ -64,6 +64,8 @@ The workflow is a repeated loop: **describe the experience → build it → play
 | Players could not immediately identify the route's endpoints. | Cyan START and gold FINISH combine labels, symbols and placement. |
 | The journey added too many steps before play. | One consistent Voyage landing and one Play action resume the route. |
 | Scenery and transitions competed with the puzzle. | Gentle layered motion, shared planet artwork and reduced-motion alternatives. |
+| The countdown felt disconnected from the loss animation. | A longer launch path hands the same visible rocket into the timeout flight, including on a foldable's vertical rail. |
+| Collection swipes changed the artwork in place. | Trails and Achievements move as finger-following page carousels, with matching chevron navigation. |
 | Opening or folding the device should preserve play. | The board stays in one pane from half-open to fully open; the surrounding mission map transitions gently. Clamshell folds become a two-part mission desk; maps, briefings and panels also give each half its own role. |
 
 Parallel agents handled focused work such as layout regressions, native fold integration, portal feedback and packaging reviews. The main game uses custom Flutter-painted artwork and projected cargo meshes. Blender scripts record visual exploration; typography uses bundled Manrope, Atkinson Hyperlegible Next and Lora fonts.
@@ -74,7 +76,7 @@ The project uses **Flutter and Dart**, with a small Swift bridge for iOS fold ge
 
 Procedural levels are deterministic and checked for legal solutions. Tests cover connected routes, coupled tiles, independent crossing lanes, portal transfers, replay validation, rewards and save migration. Layout checks exercise phones, tablets, fold postures, enlarged text and touch-target bounds. Reduced motion, semantic labels and keyboard controls are implemented; physical-device accessibility and performance review continue.
 
-The previous **0.11.4** baseline passed 905 Flutter tests and static analysis. Fold review included the iPhone simulator and synthetic Android clamshell layouts; physical-device review continues. The [0.12.0 release notes](docs/release/0.12.0.md) track the public web package and native ad integration separately from that earlier validation. These checks establish behavior within the tested cases; player enjoyment is evaluated by playing the game.
+The previous **0.11.4** baseline passed 905 Flutter tests and static analysis. Fold review included the iPhone simulator and synthetic Android clamshell layouts; physical-device review continues. The [0.12.1 release notes](docs/release/0.12.1.md) describe the countdown handoff, collection carousels and responsive voyage fixes; [0.12.0](docs/release/0.12.0.md) records the initial public web package and native ad integration. These checks establish behavior within the tested cases; player enjoyment is evaluated by playing the game.
 
 ## Run it locally
 

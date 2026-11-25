@@ -4,6 +4,9 @@ import 'package:material_ui/material_ui.dart';
 
 import 'design.dart';
 import 'orbital_craft.dart';
+import 'launch_flight_origin.dart';
+export 'launch_flight_origin.dart'
+    show CountdownFlightTracker, LaunchFlightOrigin;
 
 /// An instrument within the puzzle, not a launch action or a separate screen.
 /// The owner supplies time. This widget creates no timer or repeating ticker.
@@ -20,9 +23,13 @@ class LaunchCountdown extends StatelessWidget {
     this.prominent = false,
     this.dense = false,
     this.vertical = false,
+    this.tracker,
+    this.hideRocket = false,
     this.trailColor = Palette.light,
   });
 
+  final CountdownFlightTracker? tracker;
+  final bool hideRocket;
   final Duration remaining, total;
   final Color trailColor;
   final bool reducedMotion,
@@ -67,6 +74,8 @@ class LaunchCountdown extends StatelessWidget {
         : '$seconds seconds remaining. Rocket ${urgent ? 'at full thrust' : 'warming up'}. Launches automatically.';
     if (vertical) {
       return _VerticalCountdown(
+        tracker: tracker,
+        hideRocket: hideRocket,
         seconds: seconds,
         fraction: fraction,
         warm: warm,
@@ -81,6 +90,8 @@ class LaunchCountdown extends StatelessWidget {
     }
     if (prominent) {
       return _ProminentCountdown(
+        tracker: tracker,
+        hideRocket: hideRocket,
         remaining: remaining,
         seconds: seconds,
         fraction: fraction,
@@ -104,6 +115,8 @@ class LaunchCountdown extends StatelessWidget {
     }
     final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.6;
     final flight = _HorizontalFlightRail(
+      tracker: tracker,
+      hideRocket: hideRocket,
       fraction: fraction,
       warm: warm,
       color: color,
@@ -215,6 +228,8 @@ class LaunchCountdown extends StatelessWidget {
 /// Incoming clock updates are interpolated briefly; there is no idle ticker.
 class _VerticalCountdown extends StatelessWidget {
   const _VerticalCountdown({
+    required this.tracker,
+    required this.hideRocket,
     required this.seconds,
     required this.fraction,
     required this.warm,
@@ -227,6 +242,8 @@ class _VerticalCountdown extends StatelessWidget {
     required this.paused,
   });
 
+  final CountdownFlightTracker? tracker;
+  final bool hideRocket;
   final int seconds;
   final double fraction, warm;
   final String spoken;
@@ -307,16 +324,16 @@ class _VerticalCountdown extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 4),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, bounds) {
                     final craftWidth = math.min(54.0, bounds.maxWidth);
                     final craftHeight = craftWidth * 58 / 54;
-                    final top = craftHeight / 2 + 7;
+                    final top = craftHeight / 2 + 2;
                     final bottom = math.max(
                       top,
-                      bounds.maxHeight - craftHeight / 2 - 10,
+                      bounds.maxHeight - craftHeight / 2 - 6,
                     );
                     return TweenAnimationBuilder<double>(
                       tween: Tween(end: complete || expired ? 0 : fraction),
@@ -356,13 +373,22 @@ class _VerticalCountdown extends StatelessWidget {
                             'vertical-launch-craft-orientation',
                           ),
                           quarterTurns: 3,
-                          child: CustomPaint(
-                            painter: CountdownRocketPainter(
+                          child: Opacity(
+                            opacity: hideRocket ? 0 : 1,
+                            child: CountdownFlightAnchor(
+                              tracker: tracker,
                               heat: paused ? warm * .3 : warm,
-                              trailColor: trailColor,
                               urgent: urgent || complete || expired,
-                              reducedMotion: reducedMotion,
-                              complete: complete,
+                              trailColor: trailColor,
+                              child: CustomPaint(
+                                painter: CountdownRocketPainter(
+                                  heat: paused ? warm * .3 : warm,
+                                  trailColor: trailColor,
+                                  urgent: urgent || complete || expired,
+                                  reducedMotion: reducedMotion,
+                                  complete: complete,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -478,6 +504,8 @@ class _AscentRailPainter extends CustomPainter {
 /// anchored. Pressure is derived from the owner's clock, never an idle ticker.
 class _ProminentCountdown extends StatelessWidget {
   const _ProminentCountdown({
+    required this.tracker,
+    required this.hideRocket,
     required this.remaining,
     required this.seconds,
     required this.fraction,
@@ -493,6 +521,8 @@ class _ProminentCountdown extends StatelessWidget {
     required this.dense,
   });
 
+  final CountdownFlightTracker? tracker;
+  final bool hideRocket;
   final Duration remaining;
   final int seconds;
   final double fraction, warm;
@@ -533,10 +563,16 @@ class _ProminentCountdown extends StatelessWidget {
           ),
           child: SizedBox(
             height: height,
-            child: Row(
+            child: Stack(
               children: [
-                Expanded(
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: dense ? 46 : 56,
                   child: _HorizontalFlightRail(
+                    tracker: tracker,
+                    hideRocket: hideRocket,
                     fraction: fraction,
                     warm: warm,
                     color: color,
@@ -550,28 +586,32 @@ class _ProminentCountdown extends StatelessWidget {
                     pulse: pulse,
                   ),
                 ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: dense ? 100 : 116,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                Positioned(
+                  top: 1,
+                  left: 0,
+                  right: 0,
+                  height: dense ? 30 : 35,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text(
-                        caption.toUpperCase(),
-                        style: TextStyle(
-                          color: pressure > .3 ? color : Palette.secondary,
-                          fontSize: 10,
-                          height: 1,
-                          letterSpacing: 1.2,
-                          fontWeight: FontWeight.w600,
+                      Expanded(
+                        child: Text(
+                          caption.toUpperCase(),
+                          style: TextStyle(
+                            color: pressure > .3 ? color : Palette.secondary,
+                            fontSize: 10,
+                            height: 1,
+                            letterSpacing: 1.2,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: 8),
                       SizedBox(
-                        height: dense ? 40 : 50,
+                        width: dense ? 92 : 106,
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
-                          alignment: Alignment.topRight,
+                          alignment: Alignment.centerRight,
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -623,6 +663,8 @@ class _ProminentCountdown extends StatelessWidget {
 /// settle immediately.
 class _HorizontalFlightRail extends StatelessWidget {
   const _HorizontalFlightRail({
+    required this.tracker,
+    required this.hideRocket,
     required this.fraction,
     required this.warm,
     required this.color,
@@ -636,6 +678,8 @@ class _HorizontalFlightRail extends StatelessWidget {
     this.pulse = 1,
   });
 
+  final CountdownFlightTracker? tracker;
+  final bool hideRocket;
   final double fraction, warm, craftWidth, pulse;
   final Color color, trailColor;
   final bool reducedMotion, urgent, expired, complete, paused;
@@ -700,13 +744,22 @@ class _HorizontalFlightRail extends StatelessWidget {
           ),
           child: RepaintBoundary(
             key: const ValueKey('countdown-rocket'),
-            child: CustomPaint(
-              painter: CountdownRocketPainter(
+            child: Opacity(
+              opacity: hideRocket ? 0 : 1,
+              child: CountdownFlightAnchor(
+                tracker: tracker,
                 heat: paused ? warm * .3 : warm,
-                trailColor: trailColor,
                 urgent: urgent || complete || expired,
-                reducedMotion: reducedMotion,
-                complete: complete,
+                trailColor: trailColor,
+                child: CustomPaint(
+                  painter: CountdownRocketPainter(
+                    heat: paused ? warm * .3 : warm,
+                    trailColor: trailColor,
+                    urgent: urgent || complete || expired,
+                    reducedMotion: reducedMotion,
+                    complete: complete,
+                  ),
+                ),
               ),
             ),
           ),
@@ -725,9 +778,10 @@ class CountdownRocketPainter extends CustomPainter {
     required this.reducedMotion,
     required this.complete,
     this.trailColor = Palette.light,
+    this.enginePower = 1,
   });
 
-  final double heat;
+  final double heat, enginePower;
   final Color trailColor;
   final bool urgent, reducedMotion, complete;
 
@@ -744,7 +798,12 @@ class CountdownRocketPainter extends CustomPainter {
       ..quadraticBezierTo(14, 4.5 + warmth * 2, 24, 3.5)
       ..close();
     final flameBounds = Rect.fromLTRB(24 - flame, -7, 25, 7);
-    if (warmth > .02 || urgent) {
+    if ((warmth > .02 || urgent) && enginePower > 0) {
+      canvas.saveLayer(
+        const Rect.fromLTWH(-15, -27, 90, 54),
+        Paint()
+          ..color = Colors.white.withValues(alpha: enginePower.clamp(0.0, 1.0)),
+      );
       if (!reducedMotion) {
         canvas.drawOval(
           Rect.fromCenter(
@@ -777,6 +836,7 @@ class CountdownRocketPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round
           ..color = const Color(0xFFFFF7DF),
       );
+      canvas.restore();
     }
 
     canvas.translate(36, 0);
@@ -790,6 +850,7 @@ class CountdownRocketPainter extends CustomPainter {
   bool shouldRepaint(CountdownRocketPainter old) =>
       trailColor != old.trailColor ||
       heat != old.heat ||
+      enginePower != old.enginePower ||
       urgent != old.urgent ||
       reducedMotion != old.reducedMotion ||
       complete != old.complete;

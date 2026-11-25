@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../game/rewards.dart';
@@ -71,18 +72,13 @@ class _RewardsPanelState extends State<RewardsPanel>
   }
 
   bool get _unlocked => widget.stars >= _preview.requiredStars;
-  bool get _equipped => widget.equippedTrail == _preview;
-  String get _state => _equipped
-      ? 'Equipped'
-      : _unlocked
-      ? 'Unlocked'
-      : 'Locked';
-  String get _trailAnnouncement =>
-      '${_preview.label} rocket trail. ${_equipped
+  String _trailAnnouncementFor(ShipTrail trail) =>
+      '${trail.label} rocket trail. ${widget.equippedTrail == trail
           ? 'Equipped.'
-          : _unlocked
+          : widget.stars >= trail.requiredStars
           ? 'Unlocked.'
-          : 'Unlocks at ${_preview.requiredStars} stars.'}';
+          : 'Unlocks at ${trail.requiredStars} stars.'}';
+  String get _trailAnnouncement => _trailAnnouncementFor(_preview);
 
   @override
   void initState() {
@@ -224,110 +220,103 @@ class _RewardsPanelState extends State<RewardsPanel>
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       Expanded(
-        child: _GallerySwipe(
+        child: _GalleryCarousel(
           key: const ValueKey('trail-carousel'),
           reduceMotion: _still,
-          onPrevious: _preview.index > 0
-              ? () => setState(
-                  () => _preview = ShipTrail.values[_preview.index - 1],
-                )
-              : null,
-          onNext: _preview.index + 1 < ShipTrail.values.length
-              ? () => setState(
-                  () => _preview = ShipTrail.values[_preview.index + 1],
-                )
-              : null,
-          child: Semantics(
-            container: true,
-            explicitChildNodes: true,
-            label: _trailAnnouncement,
-            hint: 'Swipe left or right to preview trails. Tap an unlocked trail below to equip it.',
-            child: LayoutBuilder(
-              builder: (context, bounds) {
-                final preview = RepaintBoundary(
-                  child: ClipRect(
-                    child: TweenAnimationBuilder<Color?>(
-                      tween: ColorTween(end: Color(_preview.colorValue)),
-                      duration: _still
-                          ? Duration.zero
-                          : const Duration(milliseconds: 360),
-                      curve: Curves.easeInOutCubic,
-                      builder: (context, color, _) => CustomPaint(
+          page: _preview.index,
+          count: ShipTrail.values.length,
+          onPage: (page) => setState(() => _preview = ShipTrail.values[page]),
+          itemBuilder: (context, index) {
+            final trail = ShipTrail.values[index];
+            return Semantics(
+              key: ValueKey('trail-page-${trail.name}'),
+              container: true,
+              explicitChildNodes: true,
+              label: _trailAnnouncementFor(trail),
+              hint: 'Swipe left or right to preview trails. Tap an unlocked trail below to equip it.',
+              child: LayoutBuilder(
+                builder: (context, bounds) {
+                  final preview = RepaintBoundary(
+                    child: ClipRect(
+                      child: CustomPaint(
                         painter: _TrailGalleryPainter(
-                          color ?? Color(_preview.colorValue),
+                          Color(trail.colorValue),
                           _phase,
                         ),
                         child: const SizedBox.expand(),
                       ),
                     ),
-                  ),
-                );
-                final info = OrbitUtility(
-                  key: const ValueKey('collection-details'),
-                  label: 'Trail details and unlock progress',
-                  icon: Icons.info_outline_rounded,
-                  onPressed: () => setState(() {
-                    _details = true;
-                    _detailPage = 0;
-                  }),
-                  reduceMotion: _still,
-                  width: 48,
-                );
-                if (compact) {
-                  return Stack(
-                    children: [
-                      Positioned.fill(child: ExcludeSemantics(child: preview)),
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 50,
-                        child: Text(
-                          _preview.label,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            height: 1.1,
-                            color: Palette.white,
-                          ),
-                        ),
-                      ),
-                      Positioned(top: 0, right: 0, child: info),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: _statusLine(compact: true),
-                      ),
-                    ],
                   );
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
+                  final info = OrbitUtility(
+                    key: const ValueKey('collection-details'),
+                    label: 'Trail details and unlock progress',
+                    icon: Icons.info_outline_rounded,
+                    onPressed: () => setState(() {
+                      _preview = trail;
+                      _details = true;
+                      _detailPage = 0;
+                    }),
+                    reduceMotion: _still,
+                    width: 48,
+                  );
+                  if (compact) {
+                    return Stack(
                       children: [
-                        Expanded(
+                        Positioned.fill(
+                          child: ExcludeSemantics(child: preview),
+                        ),
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 50,
                           child: Text(
-                            _preview.label,
+                            trail.label,
                             style: const TextStyle(
-                              fontSize: 32,
+                              fontSize: 18,
                               fontWeight: FontWeight.w600,
-                              letterSpacing: -.8,
+                              height: 1.1,
                               color: Palette.white,
                             ),
                           ),
                         ),
-                        info,
+                        Positioned(top: 0, right: 0, child: info),
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: _statusLine(trail, compact: true),
+                        ),
                       ],
-                    ),
-                    _statusLine(),
-                    Expanded(child: ExcludeSemantics(child: preview)),
-                    _unlockProgress(),
-                  ],
-                );
-              },
-            ),
-          ),
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              trail.label,
+                              style: const TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -.8,
+                                color: Palette.white,
+                              ),
+                            ),
+                          ),
+                          info,
+                        ],
+                      ),
+                      _statusLine(trail),
+                      Expanded(child: ExcludeSemantics(child: preview)),
+                      _unlockProgress(),
+                    ],
+                  );
+                },
+              ),
+            );
+          },
         ),
       ),
       const SizedBox(height: 8),
@@ -360,22 +349,26 @@ class _RewardsPanelState extends State<RewardsPanel>
     ],
   );
 
-  Widget _statusLine({bool compact = false}) => DecoratedBox(
+  Widget _statusLine(ShipTrail trail, {bool compact = false}) => DecoratedBox(
     decoration: const BoxDecoration(),
     child: Row(
       children: [
         Icon(
-          _equipped
+          widget.equippedTrail == trail
               ? Icons.check_circle_outline_rounded
-              : _unlocked
+              : widget.stars >= trail.requiredStars
               ? Icons.radio_button_unchecked_rounded
               : Icons.lock_outline_rounded,
           size: compact ? 16 : 15,
-          color: _unlocked ? Color(_preview.colorValue) : Palette.secondary,
+          color: widget.stars >= trail.requiredStars
+              ? Color(trail.colorValue)
+              : Palette.secondary,
         ),
         const SizedBox(width: 6),
         Text(
-          _unlocked ? _state : '${_preview.requiredStars} stars',
+          widget.stars >= trail.requiredStars
+              ? (widget.equippedTrail == trail ? 'Equipped' : 'Unlocked')
+              : '${trail.requiredStars} stars',
           style: TextStyle(
             fontSize: compact ? 12 : 13,
             height: 1.1,
@@ -526,8 +519,6 @@ class _RewardsPanelState extends State<RewardsPanel>
       );
     }
     final index = _medalPage.clamp(0, achievementCatalog.length - 1);
-    final achievement = achievementCatalog[index];
-    final unlocked = widget.earnedAchievementIds.contains(achievement.id);
     return Column(
       children: [
         Text(
@@ -535,23 +526,24 @@ class _RewardsPanelState extends State<RewardsPanel>
           style: const TextStyle(fontSize: 13, color: Palette.secondary),
         ),
         Expanded(
-          child: _GallerySwipe(
+          child: _GalleryCarousel(
             key: const ValueKey('achievement-carousel'),
             reduceMotion: _still,
-            onPrevious: index > 0
-                ? () => setState(() => _medalPage = index - 1)
-                : null,
-            onNext: index + 1 < achievementCatalog.length
-                ? () => setState(() => _medalPage = index + 1)
-                : null,
-            child: Semantics(
-              label:
-                  '${achievement.label}. ${unlocked ? 'Earned.' : 'Not earned yet.'} ${achievement.description}',
-              child: ExcludeSemantics(
-                child: LayoutBuilder(
-                  builder: (context, bounds) => Center(
-                    child: SceneTransition(
-                      reduceMotion: _still,
+            page: index,
+            count: achievementCatalog.length,
+            onPage: (page) => setState(() => _medalPage = page),
+            itemBuilder: (context, page) {
+              final achievement = achievementCatalog[page];
+              final unlocked = widget.earnedAchievementIds.contains(
+                achievement.id,
+              );
+              return Semantics(
+                key: ValueKey('achievement-page-${achievement.id}'),
+                label:
+                    '${achievement.label}. ${unlocked ? 'Earned.' : 'Not earned yet.'} ${achievement.description}',
+                child: ExcludeSemantics(
+                  child: LayoutBuilder(
+                    builder: (context, bounds) => Center(
                       child: Column(
                         key: ValueKey(achievement.id),
                         mainAxisSize: MainAxisSize.min,
@@ -606,8 +598,8 @@ class _RewardsPanelState extends State<RewardsPanel>
                     ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
         _CollectionPager(
@@ -707,69 +699,71 @@ class _ReadingGallery extends StatelessWidget {
         }
       }
       final selected = page.clamp(0, pages.length - 1);
-      final item = pages[selected];
       return Column(
         children: [
           Expanded(
-            child: _GallerySwipe(
+            child: _GalleryCarousel(
               key: ValueKey('$prefix-carousel'),
               reduceMotion: reduceMotion,
-              onPrevious: selected > 0 ? () => onPage(selected - 1) : null,
-              onNext: selected + 1 < pages.length
-                  ? () => onPage(selected + 1)
-                  : null,
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: ExcludeSemantics(
-                      child: Opacity(
-                        opacity: .07,
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: item.$1.$6 != null
-                              ? AchievementArtwork(
-                                  id: item.$1.$6!,
-                                  size: math.min(
-                                    bounds.maxWidth * .7,
-                                    bounds.maxHeight - 64,
+              page: selected,
+              count: pages.length,
+              onPage: onPage,
+              itemBuilder: (context, index) {
+                final item = pages[index];
+                return Stack(
+                  key: ValueKey('$prefix-page-$index'),
+                  children: [
+                    Positioned.fill(
+                      child: ExcludeSemantics(
+                        child: Opacity(
+                          opacity: .07,
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: item.$1.$6 != null
+                                ? AchievementArtwork(
+                                    id: item.$1.$6!,
+                                    size: math.min(
+                                      bounds.maxWidth * .7,
+                                      bounds.maxHeight - 64,
+                                    ),
+                                    earned: item.$1.$5,
+                                  )
+                                : OrbitalEmblem(
+                                    size: math.min(
+                                      bounds.maxWidth * .7,
+                                      bounds.maxHeight - 64,
+                                    ),
+                                    color: item.$1.$3,
+                                    variant: item.$1.$4,
+                                    active: item.$1.$5,
                                   ),
-                                  earned: item.$1.$5,
-                                )
-                              : OrbitalEmblem(
-                                  size: math.min(
-                                    bounds.maxWidth * .7,
-                                    bounds.maxHeight - 64,
-                                  ),
-                                  color: item.$1.$3,
-                                  variant: item.$1.$4,
-                                  active: item.$1.$5,
-                                ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  Positioned.fill(
-                    child: Semantics(
-                      key: ValueKey('$prefix-copy-$selected'),
-                      label: item.$1.$2,
-                      liveRegion: true,
-                      child: ExcludeSemantics(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              item.$2,
-                              key: ValueKey('$prefix-body'),
-                              style: style,
+                    Positioned.fill(
+                      child: Semantics(
+                        key: ValueKey('$prefix-copy-$index'),
+                        label: item.$1.$2,
+                        liveRegion: true,
+                        child: ExcludeSemantics(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                item.$2,
+                                key: ValueKey('$prefix-body'),
+                                style: style,
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                );
+              },
             ),
           ),
           const SizedBox(height: 8),
@@ -787,95 +781,95 @@ class _ReadingGallery extends StatelessWidget {
   );
 }
 
-/// A horizontal, direct-manipulation carousel that never takes vertical space
-/// from the page. Paging buttons stay fixed while the specimen settles.
-class _GallerySwipe extends StatefulWidget {
-  const _GallerySwipe({
+/// Each specimen occupies a real horizontal page. Both pages remain painted
+/// throughout a drag, and the same viewport handles button-driven navigation.
+class _GalleryCarousel extends StatefulWidget {
+  const _GalleryCarousel({
     super.key,
-    required this.child,
+    required this.page,
+    required this.count,
+    required this.itemBuilder,
+    required this.onPage,
     required this.reduceMotion,
-    this.onPrevious,
-    this.onNext,
   });
-  final Widget child;
+  final int page, count;
+  final IndexedWidgetBuilder itemBuilder;
+  final ValueChanged<int> onPage;
   final bool reduceMotion;
-  final VoidCallback? onPrevious, onNext;
   @override
-  State<_GallerySwipe> createState() => _GallerySwipeState();
+  State<_GalleryCarousel> createState() => _GalleryCarouselState();
 }
 
-class _GallerySwipeState extends State<_GallerySwipe>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _settle = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 330),
-    value: 1,
-  );
-  double _drag = 0, _offset = 0;
+class _GalleryCarouselState extends State<_GalleryCarousel> {
+  late final PageController _controller;
+  late int _visiblePage;
+  int? _buttonTarget;
+
+  @override
+  void initState() {
+    super.initState();
+    _visiblePage = widget.page;
+    _controller = PageController(initialPage: widget.page);
+  }
+
+  @override
+  void didUpdateWidget(_GalleryCarousel old) {
+    super.didUpdateWidget(old);
+    if (widget.page == old.page) return;
+    if (widget.page == _visiblePage && _buttonTarget == null) return;
+    if (!_controller.hasClients) return;
+    _buttonTarget = widget.page;
+    if (widget.reduceMotion) {
+      _controller.jumpToPage(widget.page);
+    } else {
+      unawaited(
+        _controller.animateToPage(
+          widget.page,
+          duration: const Duration(milliseconds: 380),
+          curve: Curves.easeInOutCubic,
+        ),
+      );
+    }
+  }
 
   @override
   void dispose() {
-    _settle.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
-  void _release(DragEndDetails details) {
-    final velocity = details.primaryVelocity ?? 0;
-    final intent = _drag.abs() > 36 || velocity.abs() > 400 && _drag.abs() > 8;
-    final forward = _drag.abs() > 36 ? _drag < 0 : velocity < 0;
-    final turn = forward ? widget.onNext : widget.onPrevious;
-    if (intent && turn != null) {
-      turn();
-      _offset = forward ? 42 : -42;
-    }
-    if (widget.reduceMotion) {
-      setState(() => _offset = 0);
-    } else {
-      _settle.forward(from: 0);
-    }
-    _drag = 0;
-  }
-
   @override
-  Widget build(BuildContext context) => ClipRect(
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onHorizontalDragStart: (_) {
-        _settle.stop();
-        _drag = 0;
-      },
-      onHorizontalDragUpdate: (details) {
-        _drag += details.delta.dx;
-        final allowed = _drag < 0
-            ? widget.onNext != null
-            : widget.onPrevious != null;
-        setState(() {
-          _offset = widget.reduceMotion
-              ? 0
-              : (_drag * (allowed ? .28 : .10)).clamp(-55.0, 55.0);
-          _settle.value = 0;
-        });
-      },
-      onHorizontalDragEnd: _release,
-      onHorizontalDragCancel: () {
-        _drag = 0;
-        _settle.forward(from: 0);
-      },
-      child: AnimatedBuilder(
-        animation: _settle,
-        child: widget.child,
-        builder: (context, child) => Transform.translate(
-          offset: Offset(
-            widget.reduceMotion
-                ? 0
-                : _offset * (1 - Curves.easeOutCubic.transform(_settle.value)),
-            0,
+  Widget build(BuildContext context) =>
+      NotificationListener<ScrollStartNotification>(
+        onNotification: (notification) {
+          if (notification.dragDetails != null) _buttonTarget = null;
+          return false;
+        },
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(
+            scrollbars: false,
+            dragDevices: const {
+              PointerDeviceKind.touch,
+              PointerDeviceKind.mouse,
+              PointerDeviceKind.trackpad,
+              PointerDeviceKind.stylus,
+              PointerDeviceKind.invertedStylus,
+            },
           ),
-          child: child,
+          child: PageView.builder(
+            controller: _controller,
+            physics: const BouncingScrollPhysics(),
+            itemCount: widget.count,
+            itemBuilder: widget.itemBuilder,
+            onPageChanged: (page) {
+              _visiblePage = page;
+              if (_buttonTarget != null && page != _buttonTarget) return;
+              _buttonTarget = null;
+              if (widget.page != page) widget.onPage(page);
+            },
+          ),
         ),
-      ),
-    ),
-  );
+      );
 }
 
 class _CollectionPager extends StatelessWidget {

@@ -294,7 +294,15 @@ void main() {
         expect(next.hitTestable(), findsOneWidget);
         expect(tester.getRect(next).bottom, lessThanOrEqualTo(bounds.bottom));
         expect(
-          find.descendant(of: panel, matching: find.byType(Scrollable)),
+          find.descendant(
+            of: panel,
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Scrollable &&
+                  (widget.axisDirection == AxisDirection.down ||
+                      widget.axisDirection == AxisDirection.up),
+            ),
+          ),
           findsNothing,
         );
         expect(

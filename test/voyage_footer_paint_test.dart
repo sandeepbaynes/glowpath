@@ -16,10 +16,21 @@ void main() {
   ]) {
     test('arrival route dots leave the tablet reward footer clear on $size', () async {
       final focus = size.width > size.height ? .22 : .38;
-      final empty = await _paint(size, focus, 0);
-      final charted = await _paint(size, focus, 15);
+      final empty = await _paint(
+        size,
+        focus,
+        0,
+        contentBottom: size.height - 300,
+      );
+      final charted = await _paint(
+        size,
+        focus,
+        15,
+        contentBottom: size.height - 300,
+      );
       // Only the decorative dots differ between these two actual paint frames.
-      // Four pixels allow for the soft edge of a dot just above the fade line.
+      // The measured HUD edge now fits the universe above the controls rather
+      // than fading away route markers that would overlap them.
       final changed = _changedPixels(
         empty,
         charted,
@@ -47,7 +58,7 @@ void main() {
     (size: const Size(1024, 744), focus: .36),
   ]) {
     test(
-      'phone and landscape chart dots retain their existing visibility at $entry',
+      'standalone maps retain their unreserved universe at $entry',
       () async {
         final empty = await _paint(entry.size, entry.focus, 0);
         final charted = await _paint(entry.size, entry.focus, 15);
@@ -59,20 +70,26 @@ void main() {
             entry.size.height.toInt() - 296,
           ),
           greaterThan(0),
-          reason: 'The tablet arrival fade must not affect phones or separate map panels.',
+          reason: 'Separate map panels have no overlaid footer to reserve.',
         );
       },
     );
   }
 }
 
-Future<Uint8List> _paint(Size size, double focus, int completed) async {
+Future<Uint8List> _paint(
+  Size size,
+  double focus,
+  int completed, {
+  double? contentBottom,
+}) async {
   final recorder = ui.PictureRecorder();
   final painter = VoyageDepthPainter(
     current: VoyageWorld.forLevel(751),
     approach: 1,
     routesAtDestination: completed,
     verticalFocus: focus,
+    contentBottom: contentBottom,
   );
   painter.paint(ui.Canvas(recorder), size);
   final picture = recorder.endRecording();

@@ -139,6 +139,10 @@ class _GameScreenState extends State<GameScreen>
   final GameAnalytics _analytics = GameAnalytics();
   final AdPacing _adPacing = AdPacing();
   final _briefingKey = GlobalKey(debugLabel: 'mission-briefing');
+  final _voyageSceneKey = GlobalKey(debugLabel: 'voyage-universe');
+  final _voyageFooterKey = GlobalKey(debugLabel: 'voyage-footer');
+  double? _voyageContentBottom;
+  bool _voyageMeasureQueued = false;
   bool _welcome = false;
   bool _stageBriefing = false;
   bool _planetFlight = false;
@@ -164,6 +168,8 @@ class _GameScreenState extends State<GameScreen>
   int _panelDepth = 0;
   bool get _panelOpen => _panelDepth > 0 || _ads.presenting;
   bool _flightFailed = false;
+  final CountdownFlightTracker _countdownFlight = CountdownFlightTracker();
+  LaunchFlightOrigin? _lostFlightOrigin;
   void _track(String name, [Map<String, Object?> fields = const {}]) {
     unawaited(_analytics.record(name, fields).catchError((Object _) {}));
   }
@@ -484,6 +490,7 @@ class _GameScreenState extends State<GameScreen>
     if (_game.ready && _clockRound != id) {
       _clockRound = id;
       _flightFailed = false;
+      _lostFlightOrigin = null;
       _clock.reset(
         _budget + _game.attemptExtraTime,
         elapsed: _game.attemptElapsed,
@@ -532,6 +539,7 @@ class _GameScreenState extends State<GameScreen>
       setState(() => _observedChallengeRefresh = _game.hasNewChallenge);
     }
     if (_clock.expired && _canPlan && !_briefingOpen) {
+      _lostFlightOrigin = _countdownFlight.capture();
       setState(() => _flightFailed = true);
       _track('level_fail', {
         ..._levelFields,
@@ -568,6 +576,7 @@ class _GameScreenState extends State<GameScreen>
     _track('level_retry', _levelFields);
     setState(() {
       _flightFailed = false;
+      _lostFlightOrigin = null;
       _hintIndex = null;
       _lastPressureSecond = null;
       _syncClock();
@@ -772,7 +781,12 @@ class _GameScreenState extends State<GameScreen>
                   ignoring: !_flightFailed,
                   child: SceneTransition(
                     reduceMotion: _reduced,
-                    duration: const Duration(milliseconds: 260),
+                    duration:
+                        _flightFailed &&
+                            _lostFlightOrigin != null &&
+                            !_isChallenge
+                        ? Duration.zero
+                        : const Duration(milliseconds: 260),
                     child: _flightFailed
                         ? (_isChallenge
                               ? ChallengeRetryOverlay(
@@ -785,6 +799,7 @@ class _GameScreenState extends State<GameScreen>
                                 )
                               : FlightFailureOverlay(
                                   key: const ValueKey('failed-flight'),
+                                  launchOrigin: _lostFlightOrigin,
                                   panes: _activeFoldPanes,
                                   trailColor: _trailColor,
                                   onRetry: _retryFlight,
@@ -1621,6 +1636,8 @@ class _GameScreenState extends State<GameScreen>
   }) => ValueListenableBuilder<Duration>(
     valueListenable: _remaining,
     builder: (context, remaining, _) => LaunchCountdown(
+      tracker: _countdownFlight,
+      hideRocket: _flightFailed,
       compact: compact,
       prominent: prominent,
       dense: dense,
@@ -1679,7 +1696,31 @@ class _GameScreenState extends State<GameScreen>
       ? _game.nextChallengeLevel
       : _game.puzzle.levelNumber + 1;
 
+  void _measureVoyageFooter() {
+    if (_voyageMeasureQueued) return;
+    _voyageMeasureQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _voyageMeasureQueued = false;
+      if (!mounted || !_showPlanets || _activeFoldPanes != null) return;
+      final scene = _voyageSceneKey.currentContext?.findRenderObject();
+      final footer = _voyageFooterKey.currentContext?.findRenderObject();
+      if (scene is! RenderBox || !scene.hasSize) return;
+      if (footer is! RenderBox || !footer.hasSize) {
+        if (_voyageContentBottom != null) {
+          setState(() => _voyageContentBottom = null);
+        }
+        return;
+      }
+      final bottom = scene.globalToLocal(footer.localToGlobal(Offset.zero)).dy;
+      if (_voyageContentBottom == null ||
+          (_voyageContentBottom! - bottom).abs() > .5) {
+        setState(() => _voyageContentBottom = bottom);
+      }
+    });
+  }
+
   Widget _voyageScene({double? verticalFocus}) => Stack(
+    key: verticalFocus == null ? _voyageSceneKey : null,
     fit: StackFit.expand,
     children: [
       VoyageExplorer(
@@ -1697,6 +1738,7 @@ class _GameScreenState extends State<GameScreen>
                     MediaQuery.sizeOf(context).height
                 ? .22
                 : .38),
+        contentBottom: verticalFocus == null ? _voyageContentBottom : null,
         reduceMotion: _reduced,
         arrivalDuration: const Duration(milliseconds: 2600),
         arrivalCurve: Curves.easeInOutCubic,
@@ -1850,6 +1892,7 @@ class _GameScreenState extends State<GameScreen>
     return LayoutBuilder(
       builder: (context, bounds) {
         final compact = bounds.maxHeight < 430;
+        if (!pane) _measureVoyageFooter();
         final shortPortrait = bounds.maxWidth < 600 && bounds.maxHeight < 550;
         final conciseDestination =
             bounds.maxWidth < 600 &&
@@ -1915,6 +1958,7 @@ class _GameScreenState extends State<GameScreen>
           ],
         );
         final onward = Column(
+          key: !pane && !compact ? _voyageFooterKey : null,
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

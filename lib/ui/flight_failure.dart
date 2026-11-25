@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'design.dart';
 import 'fold_layout.dart';
 import 'orbital_craft.dart';
+import 'launch_countdown.dart';
 import 'space_controls.dart';
 
 enum FailurePhase { guided, offCourse, receding, lost }
@@ -48,6 +49,7 @@ class FlightFailureFrame {
     bool reducedMotion = false,
     bool persistentDrift = false,
     double? elapsedSeconds,
+    LaunchFlightOrigin? launchOrigin,
   }) {
     final seconds = persistentDrift && !reducedMotion
         ? math.max(progress.clamp(0.0, 1.0) * 6, elapsedSeconds ?? 0)
@@ -71,7 +73,7 @@ class FlightFailureFrame {
         Offset(math.sin(phaseAngle), (1 - math.cos(phaseAngle * .8)) * .6) *
         (size.shortestSide * .008 * ambient);
     final loss = (drift / 4).clamp(0.0, 1.0);
-    final length = (size.shortestSide * .34).clamp(48.0, 118.0);
+    var length = (size.shortestSide * .34).clamp(48.0, 118.0);
     final velocity = _guidedVelocity(size);
     final start = _startPoint(size);
     final snap = start + velocity * 2;
@@ -81,14 +83,50 @@ class FlightFailureFrame {
     final impulse = Offset(size.width * .025, size.height * .12);
     final responseIntegral =
         drift - response * (1 - math.exp(-drift / response));
-    final point =
+    var point =
         (broken
             ? snap + velocity * drift + impulse * responseIntegral
             : start + velocity * seconds) +
         sway;
-    final movement = broken
+    var movement = broken
         ? velocity + impulse * (1 - math.exp(-drift / response))
         : velocity;
+    // A Hermite departure inherits the actual countdown pose and forward
+    // motion, then joins the existing guided flight with matching velocity.
+    // No object respawns at the cinematic's center.
+    const handoff = 1.2;
+    double? handoffAngle;
+    if (launchOrigin != null && !reducedMotion && seconds < handoff) {
+      final u = (seconds / handoff).clamp(0.0, 1.0);
+      final u2 = u * u, u3 = u2 * u;
+      final a = launchOrigin.position;
+      final b = start + velocity * handoff;
+      final va =
+          Offset(math.sin(launchOrigin.angle), -math.cos(launchOrigin.angle)) *
+          math.max(8.0, launchOrigin.length * .25);
+      final ta = va * handoff, tb = velocity * handoff;
+      point =
+          a * (2 * u3 - 3 * u2 + 1) +
+          ta * (u3 - 2 * u2 + u) +
+          b * (-2 * u3 + 3 * u2) +
+          tb * (u3 - u2);
+      movement =
+          (a * (6 * u2 - 6 * u) +
+              ta * (3 * u2 - 4 * u + 1) +
+              b * (-6 * u2 + 6 * u) +
+              tb * (3 * u2 - 2 * u)) /
+          handoff;
+      length =
+          launchOrigin.length +
+          (length - launchOrigin.length) * (u2 * (3 - 2 * u));
+      final destinationAngle = math.atan2(velocity.dx, -velocity.dy);
+      final delta = math.atan2(
+        math.sin(destinationAngle - launchOrigin.angle),
+        math.cos(destinationAngle - launchOrigin.angle),
+      );
+      // Reframe the camera without a sharp turn caused by its translation.
+      handoffAngle = launchOrigin.angle + delta * (u2 * (3 - 2 * u));
+    }
     final scale = reducedMotion ? .82 : math.pow(1 - loss, 1.45).toDouble();
     final opacity = reducedMotion ? 1.0 : 1 - math.pow(loss, 2.2).toDouble();
     final phase = reducedMotion
@@ -110,10 +148,17 @@ class FlightFailureFrame {
           : movement,
       rocketLength: length * scale,
       rocketAngle:
-          math.atan2(movement.dx, -movement.dy) +
+          (handoffAngle ?? math.atan2(movement.dx, -movement.dy)) +
           math.sin(phaseAngle * .7) * .025 * ambient,
       rocketOpacity: opacity,
-      routeOpacity: reducedMotion ? .85 : 1 - math.pow(loss, 1.3).toDouble(),
+      routeOpacity: reducedMotion
+          ? .85
+          : (1 - math.pow(loss, 1.3).toDouble()) *
+                (launchOrigin == null
+                    ? 1
+                    : Curves.easeInOutCubic.transform(
+                        (seconds / 1.2).clamp(0.0, 1.0),
+                      )),
       guideProgress: (seconds / 2).clamp(0.0, 1.0),
       cameraPullback: loss,
       routeBroken: broken,
@@ -161,6 +206,7 @@ class FlightFailureOverlay extends StatefulWidget {
     this.reduceMotion = false,
     this.trailColor = Palette.light,
     this.panes,
+    this.launchOrigin,
   });
   static const departureDuration = Duration(milliseconds: 6000);
   static const snapDuration = Duration(milliseconds: 2000);
@@ -170,6 +216,7 @@ class FlightFailureOverlay extends StatefulWidget {
   final bool reduceMotion;
   final Color trailColor;
   final FoldPaneLayout? panes;
+  final LaunchFlightOrigin? launchOrigin;
   @override
   State<FlightFailureOverlay> createState() => _FlightFailureOverlayState();
 }
@@ -184,6 +231,7 @@ class _FlightFailureOverlayState extends State<FlightFailureOverlay>
     vsync: this,
   );
   bool _still = true, _foreground = true;
+  final GlobalKey _flightStageKey = GlobalKey();
 
   @override
   void initState() {
@@ -261,7 +309,11 @@ class _FlightFailureOverlayState extends State<FlightFailureOverlay>
           excludeFromSemantics: true,
           child: CustomPaint(
             key: const ValueKey('flight-failure-cover'),
-            painter: _FailureSky(_departure, still: _still),
+            painter: _FailureSky(
+              _departure,
+              still: _still,
+              fadeIn: widget.launchOrigin != null,
+            ),
             child: widget.panes != null
                 ? _foldPresentation(context, widget.panes!)
                 : SafeArea(
@@ -359,14 +411,7 @@ class _FlightFailureOverlayState extends State<FlightFailureOverlay>
                         final illustration = ExcludeSemantics(
                           child: SizedBox(
                             height: graphicHeight,
-                            child: CustomPaint(
-                              key: const ValueKey('flight-failure-rocket'),
-                              painter: LostRocketPainter(
-                                _departure,
-                                reducedMotion: _still,
-                                trailColor: widget.trailColor,
-                              ),
-                            ),
+                            child: _rocketScene(),
                           ),
                         );
                         final recovery = Column(
@@ -522,6 +567,27 @@ class _FlightFailureOverlayState extends State<FlightFailureOverlay>
     ),
   );
 
+  Widget _rocketScene({bool persistent = false}) => KeyedSubtree(
+    key: _flightStageKey,
+    child: CustomPaint(
+      key: const ValueKey('flight-failure-rocket'),
+      painter: LostRocketPainter(
+        _departure,
+        reducedMotion: _still,
+        trailColor: widget.trailColor,
+        persistentDrift: persistent,
+        driftClock: persistent ? _drift : null,
+        launchOrigin: widget.launchOrigin,
+        stageGlobalOffset: () {
+          final render = _flightStageKey.currentContext?.findRenderObject();
+          return render is RenderBox && render.hasSize
+              ? render.localToGlobal(Offset.zero)
+              : Offset.zero;
+        },
+      ),
+    ),
+  );
+
   Widget _foldPresentation(BuildContext context, FoldPaneLayout panes) {
     final media = MediaQuery.of(context);
     Widget pane(Rect rect, String key, Widget child) => Positioned.fromRect(
@@ -542,18 +608,7 @@ class _FlightFailureOverlayState extends State<FlightFailureOverlay>
           'failure-mission-pane',
           Padding(
             padding: const EdgeInsets.all(18),
-            child: ExcludeSemantics(
-              child: CustomPaint(
-                key: const ValueKey('flight-failure-rocket'),
-                painter: LostRocketPainter(
-                  _departure,
-                  reducedMotion: _still,
-                  trailColor: widget.trailColor,
-                  persistentDrift: true,
-                  driftClock: _drift,
-                ),
-              ),
-            ),
+            child: ExcludeSemantics(child: _rocketScene(persistent: true)),
           ),
         ),
         pane(
@@ -670,12 +725,21 @@ class _DriftClock extends Simulation {
 }
 
 class _FailureSky extends CustomPainter {
-  _FailureSky(this.departure, {required this.still})
+  _FailureSky(this.departure, {required this.still, this.fadeIn = false})
     : super(repaint: departure);
   final Animation<double> departure;
-  final bool still;
+  final bool still, fadeIn;
   @override
   void paint(Canvas canvas, Size size) {
+    if (fadeIn && !still) {
+      final alpha = Curves.easeOutCubic.transform(
+        (departure.value * 6 / .55).clamp(0.0, 1.0),
+      );
+      canvas.saveLayer(
+        Offset.zero & size,
+        Paint()..color = Colors.white.withValues(alpha: alpha),
+      );
+    }
     final t = still ? 1.0 : departure.value;
     final loss = ((t - 1 / 3) / (2 / 3)).clamp(0.0, 1.0);
     final bounds = Offset.zero & size;
@@ -720,6 +784,7 @@ class _FailureSky extends CustomPainter {
         );
       }
     }
+    if (fadeIn && !still) canvas.restore();
   }
 
   @override
@@ -735,17 +800,24 @@ class LostRocketPainter extends CustomPainter {
     this.trailColor = Palette.light,
     this.persistentDrift = false,
     this.driftClock,
+    this.launchOrigin,
+    this.stageGlobalOffset,
   }) : super(repaint: Listenable.merge([departure, driftClock]));
   final Animation<double> departure;
   final Animation<double>? driftClock;
   final bool reducedMotion, persistentDrift;
   final Color trailColor;
+  final LaunchFlightOrigin? launchOrigin;
+  final Offset Function()? stageGlobalOffset;
+  LaunchFlightOrigin? get _localOrigin =>
+      launchOrigin?.shifted(-(stageGlobalOffset?.call() ?? Offset.zero));
   FlightFailureFrame frame(Size size) => FlightFailureFrame.at(
     departure.value,
     size,
     reducedMotion: reducedMotion,
     persistentDrift: persistentDrift,
     elapsedSeconds: driftClock?.value,
+    launchOrigin: _localOrigin,
   );
   Offset rocketPosition(Size size) => frame(size).rocketPosition;
   double rocketLength(Size size) => frame(size).rocketLength;
@@ -979,6 +1051,34 @@ class LostRocketPainter extends CustomPainter {
       }
     }
     if (f.rocketOpacity <= 0 || f.rocketLength < .1) return;
+    if (launchOrigin != null && !reducedMotion) {
+      // Exactly the countdown painter, including its selected exhaust color.
+      // Only its world transform changes as the same rocket leaves the rail.
+      final inherited = launchOrigin!;
+      final heat =
+          inherited.heat +
+          (1 - inherited.heat) * (seconds / .3).clamp(0.0, 1.0);
+      final power =
+          1 - Curves.easeInOutCubic.transform((drift / .7).clamp(0.0, 1.0));
+      canvas.saveLayer(
+        Offset.zero & size,
+        Paint()..color = Colors.white.withValues(alpha: f.rocketOpacity),
+      );
+      canvas.translate(f.rocketPosition.dx, f.rocketPosition.dy);
+      canvas.rotate(f.rocketAngle - math.pi / 2);
+      canvas.scale(f.rocketLength / (13.2 * 2.31));
+      canvas.translate(-36, -27);
+      CountdownRocketPainter(
+        heat: heat,
+        urgent: inherited.urgent,
+        reducedMotion: false,
+        complete: false,
+        trailColor: inherited.trailColor,
+        enginePower: power,
+      ).paint(canvas, const Size(58, 54));
+      canvas.restore();
+      return;
+    }
     final unit = f.rocketLength / 2.31;
     canvas.saveLayer(
       Offset.zero & size,
@@ -1041,5 +1141,7 @@ class LostRocketPainter extends CustomPainter {
       driftClock != old.driftClock ||
       persistentDrift != old.persistentDrift ||
       reducedMotion != old.reducedMotion ||
-      trailColor != old.trailColor;
+      trailColor != old.trailColor ||
+      launchOrigin != old.launchOrigin ||
+      stageGlobalOffset != old.stageGlobalOffset;
 }

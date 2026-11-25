@@ -70,7 +70,14 @@ class AdConsentGate {
 
 class NativeAds extends ChangeNotifier {
   NativeAds({this.config = const NativeAdConfig()}) {
-    _consent = AdConsentGate(requestConsent);
+    _consent = AdConsentGate(() async {
+      try {
+        return await requestConsent();
+      } catch (error) {
+        _reviewLog('consent.flow.failed', {'type': error.runtimeType});
+        rethrow;
+      }
+    });
   }
   final NativeAdConfig config;
   late final AdConsentGate _consent;
@@ -120,7 +127,46 @@ class NativeAds extends ChangeNotifier {
 
   void _event(String name, String placement) => onEvent?.call(name, placement);
 
+  // Review console diagnostics deliberately exclude SDK messages, identifiers,
+  // consent strings and response payloads. Public builds remain silent.
+  void _reviewLog(String event, [Map<String, Object?> fields = const {}]) {
+    if (!config.reviewMode) return;
+    debugPrint(
+      '[GlowpathAds] $event ${fields.entries.map((e) => '${e.key}=${e.value}').join(' ')}',
+    );
+  }
+
+  Future<void> _reviewConsentState(String stage) async {
+    if (!config.reviewMode) return;
+    try {
+      final info = ConsentInformation.instance;
+      final status = await info.getConsentStatus();
+      final available = await info.isConsentFormAvailable();
+      final privacy = await info.getPrivacyOptionsRequirementStatus();
+      final allowed = await info.canRequestAds();
+      _reviewLog('consent.state', {
+        'stage': stage,
+        'status': status.name,
+        'formAvailable': available,
+        'privacyOptions': privacy.name,
+        'canRequestAds': allowed,
+      });
+    } catch (error) {
+      _reviewLog('consent.state.failed', {
+        'stage': stage,
+        'type': error.runtimeType,
+      });
+    }
+  }
+
   Future<bool> prepare() {
+    _reviewLog('prepare', {
+      'enabled': enabled,
+      'demoUnits': config.demoUnits,
+      'registeredTestDevices': config.testDevices.length,
+      'ready': ready,
+      'presenting': presenting,
+    });
     if (!enabled || _disposed || (presenting && _preparing == null)) {
       return Future.value(false);
     }
@@ -134,6 +180,7 @@ class NativeAds extends ChangeNotifier {
       final allowed = ready ? await canRequestAds() : await _consent.prepare();
       if (epoch != _consentEpoch || _disposed) return false;
       if (!allowed || !await canRequestAds()) {
+        _reviewLog('prepare.blocked', {'reason': 'consent'});
         _invalidateConsent();
         return false;
       }
@@ -143,9 +190,11 @@ class NativeAds extends ChangeNotifier {
       }
       if (_disposed || epoch != _consentEpoch) return false;
       ready = true;
+      _reviewLog('prepare.ready');
       unawaited(preloadInterstitial());
       return ready;
-    } catch (_) {
+    } catch (error) {
+      _reviewLog('prepare.failed', {'type': error.runtimeType});
       if (epoch == _consentEpoch) _invalidateConsent();
       return false;
     } finally {
@@ -177,6 +226,7 @@ class NativeAds extends ChangeNotifier {
 
   @protected
   Future<void> initializeSdk() async {
+    _reviewLog('sdk.initialize.start');
     await MobileAds.instance.updateRequestConfiguration(
       RequestConfiguration(
         testDeviceIds: config.testDevices,
@@ -184,12 +234,15 @@ class NativeAds extends ChangeNotifier {
       ),
     );
     await MobileAds.instance.initialize();
+    _reviewLog('sdk.initialize.done');
   }
 
   @protected
   Future<void> showPrivacyForm() async {
     final done = Completer<void>();
-    await ConsentForm.showPrivacyOptionsForm((_) {
+    _reviewLog('privacy.form.start');
+    await ConsentForm.showPrivacyOptionsForm((error) {
+      _reviewLog('privacy.form.dismissed', {'errorCode': error?.errorCode});
       if (!done.isCompleted) done.complete();
     });
     await done.future;
@@ -197,30 +250,57 @@ class NativeAds extends ChangeNotifier {
 
   @protected
   Future<bool> requestConsent() async {
+    _reviewLog('consent.update.start');
+    unawaited(_reviewConsentState('before-update'));
     final updated = Completer<bool>();
+    var timedOut = false;
+    final watch = Stopwatch()..start();
     ConsentInformation.instance.requestConsentInfoUpdate(
       ConsentRequestParameters(),
       () {
+        _reviewLog('consent.update.success', {
+          'elapsedMs': watch.elapsedMilliseconds,
+          'late': timedOut,
+        });
+        if (timedOut) unawaited(_reviewConsentState('late-update'));
         if (!updated.isCompleted) updated.complete(true);
       },
-      (_) {
+      (error) {
+        _reviewLog('consent.update.failed', {
+          'errorCode': error.errorCode,
+          'elapsedMs': watch.elapsedMilliseconds,
+          'late': timedOut,
+        });
         if (!updated.isCompleted) updated.complete(false);
       },
     );
     final gotUpdate = await updated.future.timeout(
       const Duration(seconds: 15),
-      onTimeout: () => false,
+      onTimeout: () {
+        timedOut = true;
+        _reviewLog('consent.update.timeout');
+        return false;
+      },
     );
+    unawaited(_reviewConsentState('after-update'));
     if (gotUpdate) {
       final dismissed = Completer<void>();
-      await ConsentForm.loadAndShowConsentFormIfRequired((_) {
+      _reviewLog('consent.form.start');
+      await ConsentForm.loadAndShowConsentFormIfRequired((error) {
+        _reviewLog('consent.form.dismissed', {'errorCode': error?.errorCode});
         if (!dismissed.isCompleted) dismissed.complete();
       });
       // The player's consent form is never treated as answered by a timeout.
       await dismissed.future;
+      unawaited(_reviewConsentState('after-form'));
     }
     privacyOptionsRequired = await requiresPrivacyOptions();
-    return canRequestAds();
+    final allowed = await canRequestAds();
+    _reviewLog('consent.result', {
+      'canRequestAds': allowed,
+      'privacyOptionsRequired': privacyOptionsRequired,
+    });
+    return allowed;
   }
 
   Future<void> privacyOptions() async {
@@ -256,12 +336,16 @@ class NativeAds extends ChangeNotifier {
     _loadingInterstitial = true;
     _lastLoad = now;
     _event('ad_request', 'voyage_result');
+    _reviewLog('interstitial.load.start');
     try {
       await InterstitialAd.load(
         adUnitId: unit('interstitial'),
         request: const AdRequest(nonPersonalizedAds: true),
         adLoadCallback: InterstitialAdLoadCallback(
           onAdLoaded: (ad) {
+            _reviewLog('interstitial.load.success', {
+              'currentConsent': hasCurrentConsent(epoch),
+            });
             if (epoch == _consentEpoch) _loadingInterstitial = false;
             if (!hasCurrentConsent(epoch)) {
               ad.dispose();
@@ -272,12 +356,14 @@ class NativeAds extends ChangeNotifier {
             _interstitial = ad;
             _loadedAt = DateTime.now();
           },
-          onAdFailedToLoad: (_) {
+          onAdFailedToLoad: (error) {
+            _reviewLog('interstitial.load.failed', {'errorCode': error.code});
             if (epoch == _consentEpoch) _loadingInterstitial = false;
           },
         ),
       );
-    } catch (_) {
+    } catch (error) {
+      _reviewLog('interstitial.load.exception', {'type': error.runtimeType});
       if (epoch == _consentEpoch) _loadingInterstitial = false;
     }
   }

@@ -105,7 +105,11 @@ void main() {
           state: state,
         );
         await tester.pumpAndSettle();
-        expect(_rect(tester, 'countdown-rocket').center, finish, reason: state);
+        expect(
+          (_rect(tester, 'countdown-rocket').center - finish).distance,
+          lessThan(.001),
+          reason: state,
+        );
         await _host(tester, mode: mode, seconds: 120);
         await tester.pumpAndSettle();
         expect(_rect(tester, 'countdown-rocket').center, start);

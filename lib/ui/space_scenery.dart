@@ -973,6 +973,7 @@ class VoyageExplorer extends StatefulWidget {
     this.animateArrival = true,
     this.trailColor = _spaceGold,
     this.paintBackground = true,
+    this.contentBottom,
   });
 
   final VoyageWorld current;
@@ -985,6 +986,9 @@ class VoyageExplorer extends StatefulWidget {
   final bool animateArrival;
   final Color trailColor;
   final bool paintBackground;
+
+  /// Lower edge of the usable universe, before the foreground flight controls.
+  final double? contentBottom;
 
   @override
   State<VoyageExplorer> createState() => _VoyageExplorerState();
@@ -1333,6 +1337,7 @@ class _VoyageExplorerState extends State<VoyageExplorer>
                             : null,
                         verticalFocus: widget.verticalFocus,
                         paintBackground: widget.paintBackground,
+                        contentBottom: widget.contentBottom,
                       ),
                       child: const SizedBox.expand(),
                     ),
@@ -1944,6 +1949,7 @@ class VoyageDepthPainter extends CustomPainter {
     this.ambient,
     this.verticalFocus = .30,
     this.paintBackground = true,
+    this.contentBottom,
   }) : super(repaint: ambient);
   final VoyageWorld current;
   final double approach;
@@ -1954,6 +1960,7 @@ class VoyageDepthPainter extends CustomPainter {
   final Animation<double>? ambient;
   final double verticalFocus;
   final bool paintBackground;
+  final double? contentBottom;
   static const destinationSpacing = 2.65;
   static const nearPlane = .8;
 
@@ -2094,8 +2101,31 @@ class VoyageDepthPainter extends CustomPainter {
     );
   }
 
+  /// Reserve room for every route marker and the complete arrival flight. The
+  /// bounds come from the laid-out HUD, including safe areas and banner space.
+  /// Fit the resting composition once; exploring in depth keeps a fixed camera.
+  double effectiveVerticalFocus(Size size) {
+    final floor = contentBottom;
+    if (floor == null || size.height <= 0) return verticalFocus;
+    final span = sceneSpan(size), focal = span * .8;
+    final radius = span * (current.isBlackHole ? .46 : .42) / 1.92;
+    var lowerExtent = .72 * focal / 1.92 + radius * 1.42;
+    // Reserve the final orbit slot without shifting the camera between routes.
+    const angle = 1.48;
+    final orbitRadius = (current.isBlackHole ? .46 : .42) / .8 * 1.22;
+    final destinationY = .72 + math.sin(angle) * orbitRadius;
+    // The approach bows upward. Its projected lower envelope is bounded by
+    // the endpoints; include three craft units for engine glow and the trail.
+    lowerExtent = math.max(lowerExtent, (.68 * focal + span * .105) / 1.05);
+    lowerExtent = math.max(
+      lowerExtent,
+      (destinationY * focal + span * .105) / 1.92,
+    );
+    return math.min(verticalFocus, (floor - 24 - lowerExtent) / size.height);
+  }
+
   Offset _project(Size size, double x, double y, double z) =>
-      project(size, x, y, z, verticalFocus: verticalFocus);
+      project(size, x, y, z, verticalFocus: effectiveVerticalFocus(size));
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -2218,17 +2248,6 @@ class VoyageDepthPainter extends CustomPainter {
           final angle = .72 + point * (.76 / 14);
           final location =
               center + Offset(math.cos(angle), math.sin(angle)) * radius * 1.22;
-          // The full-screen tablet footer holds collection progress
-          // and Play. Let only these decorative dots recede before its text;
-          // the planet, courier and camera retain their full-universe geometry.
-          final footerFade =
-              size.shortestSide >= 600 &&
-                  (size.width > size.height
-                      ? verticalFocus <= .24
-                      : verticalFocus >= .35)
-              ? ((size.height - 300 - location.dy) / 28).clamp(0.0, 1.0)
-              : 1.0;
-          if (footerFade == 0) continue;
           canvas.drawCircle(
             location,
             point % 5 == 0 ? 2.3 : 1.7,
@@ -2237,7 +2256,7 @@ class VoyageDepthPainter extends CustomPainter {
                   ? PaintingStyle.fill
                   : PaintingStyle.stroke
               ..strokeWidth = .8
-              ..color = world.accent.withValues(alpha: visibility * footerFade),
+              ..color = world.accent.withValues(alpha: visibility),
           );
         }
       }
@@ -2344,6 +2363,7 @@ class VoyageDepthPainter extends CustomPainter {
       cameraExcursion != old.cameraExcursion ||
       ambient != old.ambient ||
       verticalFocus != old.verticalFocus ||
+      contentBottom != old.contentBottom ||
       paintBackground != old.paintBackground;
 }
 
