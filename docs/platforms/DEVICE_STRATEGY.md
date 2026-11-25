@@ -4,7 +4,7 @@ This document records interaction decisions and what is actually built. A store 
 
 ## Shared game, distinct interfaces
 
-The puzzle generator, route rules, scoring, progression and replay format are the common game specification. Flutter currently renders mobile and web. watchOS has an experimental SwiftUI implementation. TV needs remote navigation. XR needs a native spatial scene and input system; placing the Flutter board on a floating flat panel would miss the intended interaction.
+The puzzle generator, route rules, scoring, progression and replay format are the common game specification. Flutter currently renders mobile and web. watchOS and tvOS have isolated experimental SwiftUI implementations. XR needs a native spatial scene and input system; placing the Flutter board on a floating flat panel would miss the intended interaction.
 
 Use a versioned level/replay contract for any native edition. A route action should identify its tile, orientation, lane and timestamp; the rules engine should verify the final path and optional cargo independently of the renderer. Before sharing scores across editions, test that native clients produce the same result from the same level seed and action sequence. No cross-platform service is deployed yet.
 
@@ -17,7 +17,7 @@ Use a versioned level/replay contract for any native edition. A route action sho
 | Book fold, partly open | Two deliberate surfaces divided at the hinge: one stable puzzle surface and one map/timer/control surface. | Real hinge geometry, posture transitions and reach. |
 | Book fold, fully open | Preserve board position and progress as the second surface expands. | Device-specific window metrics and transition smoothness. |
 | Flip fold, partly open | Puzzle on the touch-friendly half; timer/map on the other. | Real flip device and exterior display policy. |
-| watchOS / Wear OS | Short independent routes without ads or purchases; phone discovery can be optional. | watchOS simulator/device playtest; Wear OS implementation and test. |
+| watchOS / Wear OS | Short independent routes without ads or purchases; phone discovery can be optional. | 40/46 mm watchOS simulator layouts reviewed; physical watch testing, full watch edition and Wear OS implementation remain. |
 
 Desktop web is built. Native macOS, Windows and Linux, including a Steam Deck layout, are distribution candidates using Flutter desktop targets. They need keyboard/controller navigation, performance QA and signed platform packages; there is no native desktop release today. Console distribution would additionally require platform access and dev hardware, so it is a separate evaluation rather than an assumed release.
 
@@ -27,7 +27,7 @@ The current Flutter mobile baseline is iOS 15 and Android API 24, the oldest ver
 
 Apple TV and Android TV should use a selected tile with directional moves and Select to rotate/confirm, plus Back to reverse. Every screen must be operable with only a D-pad. The timer should be tuned against actual remote completion times rather than using the 30-second phone window; increase it for each route until playtesting shows fair pressure. Use readable text and visible focus at viewing distance. Do not carry phone banner placements onto TV by default. [Android TV controller requirements](https://developer.android.com/training/tv/get-started/controllers), [Apple game input guidance](https://developer.apple.com/design/human-interface-guidelines/designing-for-games).
 
-Android TV can potentially share an Android package after a remote-first layout, Leanback launcher entry, and TV testing. Apple TV requires a tvOS target. Neither target currently exists.
+Android TV can potentially share an Android package after a remote-first layout, Leanback launcher entry, and TV testing; that target is unbuilt. The isolated [tvOS preview](../../tv/README.md) now builds and runs in the Apple TV simulator. It has a 3×3 board, five route templates, a 90-second clock, D-pad focus, Select rotation, hints, Undo, retry and local scores. It does not yet include the full Voyage, obstacle catalogue, collections or cinematic flight. Simulator input and layout review is not a substitute for physical Siri Remote, VoiceOver and viewing-distance testing.
 
 ## Spatial interaction
 
@@ -43,4 +43,6 @@ Android TV can potentially share an Android package after a remote-first layout,
 | **PICO / PICO Store** | PICO Neo3, PICO 4 and PICO 4 Ultra support hand tracking with the documented OS minimum; the richer Hand Interaction Profile is limited to PICO 4 Ultra. Use a feature-gated Unity OpenXR adapter and controllers as fallback. | PICO 4 Ultra and an older target device, with store package review. [PICO hand tracking](https://developer.picoxr.com/document/unity-openxr/hand-tracking/). |
 | **PC VR / SteamVR and VIVE** | OpenXR controller actions are the baseline. Some VIVE devices expose hand tracking, but availability varies by headset and runtime, so hands are an enhancement rather than a requirement. | Windows PC VR build, tested input bindings and at least one compatible headset before a Steam listing. [SteamVR OpenXR settings](https://partner.steamgames.com/doc/features/steamvr/settings), [VIVE hand tracking](https://developer.vive.com/resources/openxr/unreal/unreal-tutorials/handtracking/). |
 
-The first spatial prototype should prove one route can be completed by reach and by controller, a planet can be grabbed and elastically released, and the same seed/replay is scored identically to mobile. Only then expand the authored scene and distribution targets. Each storefront needs its own developer account, package, metadata, accessibility and device QA. There are no XR binaries or store submissions in this repository yet.
+The first spatial prototype should prove one route can be completed by reach and by controller, a planet can be grabbed and elastically released, and the same seed/replay is scored identically to mobile. Only then expand the authored scene and distribution targets. Each storefront needs its own developer account, package, metadata, accessibility and device QA. There are no native XR binaries or store submissions in this repository yet.
+
+On 25 November 2026, the existing iPad app was built and launched on the Vision Pro simulator using Xcode's **Designed for iPad** destination, with ads and purchases disabled. Its first-flight interface renders in a flat compatibility window. Automated simulator clicks did not activate the onboarding button, so playability and input remain unverified; this is not a native spatial edition. The input issue has not yet been isolated to the app or Device Hub. See [Apple's compatibility guidance](https://developer.apple.com/documentation/visionos/making-your-app-compatible-with-visionos) and the [simulator review](SIMULATOR_REVIEW_2026_11_25.md).

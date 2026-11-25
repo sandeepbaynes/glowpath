@@ -179,14 +179,21 @@ private struct WatchMissionView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let boardSide = max(90, min(geometry.size.width - 12, geometry.size.height - 46))
+            let smallWatch = geometry.size.width < 180
+            // Use the space below the watch's clock without also reserving the
+            // system's scrolling-content margins. The game has no scroll view.
+            let topInset: CGFloat = smallWatch ? 28 : 36
+            let bottomInset: CGFloat = smallWatch ? 8 : 10
+            let contentHeight = geometry.size.height - topInset - bottomInset
+            let toolbarHeight: CGFloat = smallWatch ? 28 : 32
+            let boardSide = max(90, min(geometry.size.width - 16, contentHeight - toolbarHeight - 3))
             ZStack {
                 FlightColor.space.ignoresSafeArea()
                 Starfield().allowsHitTesting(false).accessibilityHidden(true)
                 if showingHelp || !helpSeen {
-                    briefing(height: geometry.size.height)
+                    briefing(height: contentHeight)
                 } else if let won = mission.result {
-                    outcome(won: won, height: geometry.size.height)
+                    outcome(won: won, height: contentHeight)
                 } else {
                     VStack(spacing: 3) {
                         HStack(spacing: 5) {
@@ -211,15 +218,18 @@ private struct WatchMissionView: View {
                                 .foregroundStyle(mission.remaining <= 8 ? Color(red: 1, green: 0.52, blue: 0.40) : FlightColor.gold)
                                 .accessibilityLabel("\(Int(ceil(mission.remaining))) seconds remaining")
                             flightButton("Hint", accent: FlightColor.teal) { mission.hint() }.frame(width: 42)
-                        }.frame(height: 40).padding(.horizontal, 10)
+                        }.frame(height: toolbarHeight).padding(.horizontal, 10)
                         board.frame(width: boardSide, height: boardSide)
 
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            .padding(.top, topInset)
+            .padding(.bottom, bottomInset)
             .foregroundStyle(FlightColor.ink)
         }
+        .ignoresSafeArea(.container)
         .onChange(of: phase) { _, newPhase in mission.setActive(newPhase == .active && !showingHelp && helpSeen) }
     }
 
@@ -247,23 +257,26 @@ private struct WatchMissionView: View {
 
     private func briefing(height: CGFloat) -> some View {
         let compact = height < 215
-        return VStack(spacing: compact ? 6 : 9) {
+        return VStack(spacing: compact ? 4 : 9) {
             Text("GLOWPATH").font(.system(size: 12, weight: .semibold, design: .rounded)).tracking(2).foregroundStyle(FlightColor.teal)
             if !compact { Text("A little flight.").font(.system(size: 21, weight: .medium, design: .rounded)) }
             HStack(spacing: 7) {
                 TileDrawing(mask: 10, lit: true, star: false, start: true, finish: false)
                 TileDrawing(mask: 10, lit: true, star: true, start: false, finish: false)
                 TileDrawing(mask: 10, lit: true, star: false, start: false, finish: true)
-            }.frame(height: compact ? 28 : 36)
-            Text("Tap to turn. Link START to FINISH through three stars.")
-                .font(.system(size: 12, weight: .regular, design: .rounded)).multilineTextAlignment(.center).foregroundStyle(FlightColor.muted)
+            }.frame(height: compact ? 24 : 36)
+            Text(compact ? "Tap tiles to turn.\nSTART → 3 stars → FINISH" : "Tap to turn. Link START to FINISH through three stars.")
+                .font(.system(size: compact ? 11 : 12, weight: .regular, design: .rounded))
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(FlightColor.muted)
             Text("30s · starts on your first tap")
                 .font(.system(size: 9, weight: .medium, design: .rounded)).foregroundStyle(FlightColor.gold)
             flightButton("Let's fly", accent: FlightColor.teal) {
                 helpSeen = true
                 showingHelp = false
                 mission.setActive(phase == .active)
-            }.frame(height: 38)
+            }.frame(height: compact ? 36 : 38)
         }.padding(.horizontal, 12).frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
@@ -322,14 +335,21 @@ private struct TileDrawing: View {
                 context.stroke(StarMark().path(in: CGRect(x: center.x - 5, y: center.y - 5, width: 10, height: 10)), with: .color(lit ? FlightColor.gold : FlightColor.channel), lineWidth: 1)
             }
             if start {
+                let badge = CGRect(x: 0, y: center.y - 6, width: 12, height: 12)
+                context.fill(Path(ellipseIn: badge), with: .color(FlightColor.space))
+                context.stroke(Path(ellipseIn: badge.insetBy(dx: 0.7, dy: 0.7)), with: .color(FlightColor.teal), lineWidth: 1)
                 var arrow = Path()
-                arrow.move(to: CGPoint(x: 2, y: center.y - 4))
-                arrow.addLines([CGPoint(x: 8, y: center.y), CGPoint(x: 2, y: center.y + 4)])
+                arrow.move(to: CGPoint(x: 4, y: center.y - 3))
+                arrow.addLine(to: CGPoint(x: 9, y: center.y))
+                arrow.addLine(to: CGPoint(x: 4, y: center.y + 3))
                 arrow.closeSubpath()
                 context.fill(arrow, with: .color(FlightColor.teal))
             }
             if finish {
-                context.stroke(Path(ellipseIn: CGRect(x: size.width - 8, y: center.y - 3, width: 6, height: 6)), with: .color(FlightColor.gold), lineWidth: 1.5)
+                let badge = CGRect(x: size.width - 12, y: center.y - 6, width: 12, height: 12)
+                context.fill(Path(ellipseIn: badge), with: .color(FlightColor.space))
+                context.stroke(Path(ellipseIn: badge.insetBy(dx: 1.2, dy: 1.2)), with: .color(FlightColor.gold), lineWidth: 1.5)
+                context.fill(Path(ellipseIn: badge.insetBy(dx: 4.4, dy: 4.4)), with: .color(FlightColor.gold))
             }
         }
     }

@@ -8,6 +8,14 @@ The clock pauses while help is open or the app is inactive. Retry resets the tim
 
 The watch edition is **not yet a production release**. Full Voyage worlds, collections, Daily/Weekly challenges, phone handoff, WatchConnectivity sync and store assets are not implemented here. Physical-watch accessibility, haptics, battery and performance still need device review. The five route shapes repeat with varied starts; they are not the phone game's full level catalogue.
 
+## Simulator review — 25 November 2026
+
+The native preview builds, installs and launches on the installed watchOS 27.2 runtime. Initial layout review covers Apple Watch SE 3 (40 mm, 324×394 pixels) and Series 12 (46 mm, 416×496 pixels). The smaller watch exposed truncated first-flight instructions; the compact briefing now uses two explicit lines and tighter diagram spacing so START, the three-star objective and FINISH remain visible above the play action.
+
+Gameplay review also found that default scrolling-content safe margins left the 40 mm board only 90 points wide. The non-scrolling game now reserves space directly below the system clock and uses a compact toolbar: the board is 130 points wide, with approximately 41-point tiles, while retaining clear edges. Cyan START and gold FINISH beacons have dark backing to stay visible over the route. The START arrow's path construction was corrected so its filled triangle actually renders.
+
+Interactive review on the 40 mm simulator verified tile rotation, Hint, clock start, timeout, Retry with the arrangement retained, assisted completion (+295 points), and Next flight to Route 02. The 46 mm briefing and gameplay were visually reviewed. Simulator captures are recorded in the [platform review](../docs/platforms/SIMULATOR_REVIEW_2026_11_25.md). This does not verify physical-watch readability, haptics or battery use.
+
 ## Build
 
 Requires Xcode with the watchOS platform SDK. A simulator runtime is needed to install and play, but not for the generic build:
