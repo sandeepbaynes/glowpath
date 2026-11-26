@@ -40,11 +40,12 @@ The planned watch edition will offer a complete, ad-free game that can be played
 | Flip-style foldable | Give the two halves separate jobs when partly open; return to a single game surface when closed. The external cover display is a separate, unbuilt target. | Posture layouts built; physical flip testing pending. |
 | Apple Watch and Wear OS | A short, self-contained, ad-free routing game that can introduce the phone edition. | watchOS simulator prototype reviewed; physical watch testing and Wear OS implementation pending. |
 | Apple TV and Android TV | D-pad/remote play, visible focus, couch-distance text and a longer clock to allow for remote input. | [Native tvOS preview](tv/README.md) reviewed with remote controls and a 90-second timer; full TV edition and Android TV unbuilt. |
-| Apple Vision Pro, Meta Quest, Android XR, PICO and supported PC VR headsets | A spatial puzzle in front of the player, with reach/pinch routing, grabbable planets, elastic spin/flick and a controller alternative. | iPad compatibility window renders in the Vision Pro simulator; input verification remains open. The [native immersive editions](docs/platforms/DEVICE_STRATEGY.md) are unbuilt. |
+| Apple Vision Pro | A surrounding galaxy and 3D pipe route, with pieces ahead, behind, above and below; direct manipulation and seated environment rotation. | [Native immersive prototype](spatial/README.md): twelve worlds and one eighteen-piece route. Simulator Debug and unsigned device Release compile. Hover works; automated taps, physical hands and walking are unverified. |
+| Meta Quest / Oculus Quest, Android XR, PICO and supported PC VR headsets | The same surrounding-world design, with hands where supported, tracked-controller alternatives and seated controls. | [OpenXR implementation planned](docs/platforms/IMMERSIVE_XR.md); Unity is not installed and headset binaries are not built. |
 
 Flutter 3.50 supports **iOS 15+** and **Android API 24+**, which are the current mobile minimums for this codebase. An app store accepting older OS targets does not make those targets supported by this Flutter version. The native watch, TV and XR editions need their own builds and device testing. [Flutter platform support](https://docs.flutter.dev/reference/supported-platforms).
 
-The [25 November simulator review](docs/platforms/SIMULATOR_REVIEW_2026_11_25.md) includes real watch, TV and Vision Pro captures, tested interactions and remaining limitations.
+The [25 November simulator review](docs/platforms/SIMULATOR_REVIEW_2026_11_25.md) includes real watch, TV and flat Vision Pro compatibility captures. The later [native spatial prototype](spatial/README.md) implements the surrounding-world direction; its build status and remaining interaction checks are documented separately.
 
 <p align="center">
   <img src="docs/showcase/gameplay.png" width="290" alt="Mobile puzzle with a launch countdown, START and FINISH markers, and a four-by-four routing board">
@@ -68,6 +69,7 @@ The workflow is a repeated loop: **describe the experience → build it → play
 | Scenery and transitions competed with the puzzle. | Gentle layered motion, shared planet artwork and reduced-motion alternatives. |
 | The countdown felt disconnected from the loss animation. | A longer launch path hands the same visible rocket into the timeout flight, including on a foldable's vertical rail. |
 | Collection swipes changed the artwork in place. | Trails and Achievements move as finger-following page carousels, with matching chevron navigation. |
+| VR should put the player inside the world. | A separate native visionOS prototype places planets and 3D pipe pieces around the player, with an orbit handle and seated rotation controls. |
 | Opening or folding the device should preserve play. | The board stays in one pane from half-open to fully open; the surrounding mission map transitions gently. Clamshell folds become a two-part mission desk; maps, briefings and panels also give each half its own role. |
 
 Parallel agents handled focused work such as layout regressions, native fold integration, portal feedback and packaging reviews. The main game uses custom Flutter-painted artwork and projected cargo meshes. Blender scripts record visual exploration; typography uses bundled Manrope, Atkinson Hyperlegible Next and Lora fonts.
